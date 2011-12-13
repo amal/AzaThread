@@ -142,5 +142,4 @@ Another examples you can see in the example file (*example.php*) and unit test (
 Links
 -----
 
-CThread — многопоточность для PHP с блэкджеком
-http://habrahabr.ru/blogs/php/134501/
+[CThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
