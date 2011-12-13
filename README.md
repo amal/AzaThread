@@ -136,10 +136,11 @@ do {
 $pool->cleanup();
 ```
 
-Another examples you can see in the example file (example.php) and unit test (tests/Test_Thread.php).
+Another examples you can see in the example file (*example.php*) and unit test (*tests/Test_Thread.php*).
 
 
 Links
---------
+-----
 
-
+CThread — многопоточность для PHP с блэкджеком
+http://habrahabr.ru/blogs/php/134501/
