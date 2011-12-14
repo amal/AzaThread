@@ -4,9 +4,9 @@ CThread
 https://github.com/amal/CThread
 
 
-CThread is a simple and powerful threads component for PHP.
+CThread is a simple and powerful threads emulation component for PHP.
 
-Libreary uses libevent and socket pairs for inter-process communication. Also it can use five variants of data transfering between processes and automatically selects the best of them
+The library uses forks to operate asynchronously and libevent with socket pairs for main inter-process communication. Also it can use five variants of data transfering (for processing arguments, results and event data) between processes and automatically selects the best of them: igbinary serialized data through sockets, php serialized data through sockets, System V Memory queue (sysvmsg), System V shared memory (sysvshm), Shared memory (shmop).
 
 
 Main features and possibilites:
@@ -136,7 +136,9 @@ do {
 $pool->cleanup();
 ```
 
-Another examples you can see in the example file (*example.php*) and unit test (*tests/Test_Thread.php*).
+Another examples you can see in the example file ([example.php](https://github.com/amal/CThread/blob/master/example.php)) and unit test ([tests/Test_Thread.php](https://github.com/amal/CThread/blob/master/tests/Test_Thread.php)).
+
+You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/CThread/blob/master/test.php).
 
 
 Links
