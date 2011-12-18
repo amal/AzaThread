@@ -6,7 +6,7 @@
  *
  * @project Anizoptera CMF
  * @package system.thread
- * @version $Id: CThread.php 2897 2011-12-13 10:48:29Z samally $
+ * @version $Id: CThread.php 2917 2011-12-16 22:47:10Z samally $
  */
 abstract class CThread extends CShell
 {
@@ -15,20 +15,20 @@ abstract class CThread extends CShell
 	 */
 	const EOP = "\3\0\4";
 
-	// States
-	const STATE_TERM = 0x1; // Reserved
-	const STATE_INIT = 0x2;
-	const STATE_WAIT = 0x4;
-	const STATE_WORK = 0x8;
+	// Thread states
+	const STATE_TERM = 1;
+	const STATE_INIT = 2;
+	const STATE_WAIT = 3;
+	const STATE_WORK = 4;
 
-	// Packets
+	// Types of IPC packets
 	const P_DATA   = 0x01;
 	const P_STATE  = 0x02;
 	const P_JOB    = 0x04;
 	const P_EVENT  = 0x08;
 	const P_SERIAL = 0x10;
 
-	// Timer names
+	// Types of IPC data transfer modes
 	const IPC_IGBINARY   = 1; // Igbinary			(8th, 6625 jps)
 	const IPC_SERIALIZE  = 2; // Serialization		(8th, 6501 jps)
 	const IPC_SYSV_QUEUE = 3; // SysV Memory queue	(8th, 6194 jps)
@@ -394,11 +394,6 @@ abstract class CThread extends CShell
 				$debug && $this->debug(self::D_INIT . 'Master pipes initialized');
 			}
 
-			// Libevent check
-			if (!self::$hasLibevent) {
-				throw new Exception('Threads in fork mode currently supported only with Libevent');
-			}
-
 			// Shared master event base
 			if (null === self::$eventBase) {
 				self::$eventBase = new CLibEventBase();
@@ -702,7 +697,7 @@ abstract class CThread extends CShell
 			throw new AzaException("Can't run thread. It is not in waiting state.");
 		}
 
-		$this->debug(self::D_INFO . 'Job start');
+		($debug = $this->debug) && $this->debug(self::D_INFO . 'Job start');
 		$this->setState(self::STATE_WORK);
 		$this->result  = null;
 		$this->success = false;
@@ -713,7 +708,7 @@ abstract class CThread extends CShell
 		if (self::$useForks) {
 			// Thread is alive
 			if ($this->getIsAlive()) {
-				$this->debug(self::D_INFO . "Child is already running ($this->child_pid)");
+				$debug && $this->debug(self::D_INFO . "Child is already running ($this->child_pid)");
 				$this->sendPacketToChild(self::P_JOB, $args ?: null);
 				$this->startWorkTimeout();
 			}
@@ -730,7 +725,7 @@ abstract class CThread extends CShell
 					if ($this->multitask) {
 						$this->evWorkerLoop();
 					}
-					$this->debug(self::D_INFO . 'Simple end of work, exiting');
+					$debug && $this->debug(self::D_INFO . 'Simple end of work, exiting');
 					return $this->shutdown();
 				}
 			}
@@ -740,7 +735,7 @@ abstract class CThread extends CShell
 			$this->setParams($args);
 			$res = $this->process();
 			$this->setResult($res);
-			$this->debug(self::D_INFO . 'Sync job ended');
+			$debug && $this->debug(self::D_INFO . 'Sync job ended');
 		}
 
 		return $this;
@@ -759,6 +754,8 @@ abstract class CThread extends CShell
 	 * Waits until the thread becomes waiting
 	 *
 	 * @throws AzaException
+	 *
+	 * @return CThread
 	 */
 	public function wait()
 	{
@@ -770,6 +767,7 @@ abstract class CThread extends CShell
 				throw new AzaException('Could not wait for the thread');
 			}
 		}
+		return $this;
 	}
 
 	/**
@@ -851,13 +849,15 @@ abstract class CThread extends CShell
 	 */
 	public function trigger($event, $data = null)
 	{
-		$this->debug(self::D_INFO . "Triggering event [$event]");
+		($debug = $this->debug) && $this->debug(self::D_INFO . "Triggering event [$event]");
 
 		// Child
 		if ($this->isChild) {
 			$this->sendPacketToParent(self::P_EVENT, $event, $data);
 			if (null !== $data && $this->eventLocking) {
-				$this->debug(self::D_INFO . "Locking thread - waiting for event read confirmation");
+				$debug && $this->debug(
+					self::D_INFO . "Locking thread - waiting for event read confirmation"
+				);
 				$this->waiting = true;
 			}
 		}
@@ -922,22 +922,22 @@ abstract class CThread extends CShell
 	/**
 	 * Returns thread state name
 	 *
+	 * @param int $state Integer state value. Current state will be used instead
+	 *
 	 * @return string
 	 */
-	public function getStateName()
+	public function getStateName($state = null)
 	{
-		$state = $this->state;
-		if (self::STATE_WAIT === $state) {
-			return 'wait';
-		} else if (self::STATE_WORK === $state) {
-			return 'work';
-		} else if (self::STATE_INIT === $state) {
-			return 'init';
-		} else if (self::STATE_TERM === $state) {
-			return 'term';
-		} else {
-			return 'unknown';
-		}
+		null !== $state || $state = $this->state;
+		return  self::STATE_WAIT === $state
+				? 'WAIT'
+				: (self::STATE_WORK === $state
+				? 'WORK'
+				: (self::STATE_INIT === $state
+				? 'INIT'
+				: (self::STATE_TERM === $state
+				? 'TERM'
+				: 'UNKNOWN')));
 	}
 
 	/**
@@ -1026,17 +1026,9 @@ abstract class CThread extends CShell
 		$state = (int)$state;
 
 		if ($debug = $this->debug) {
-			$s = 'Changing state to: "';
-			if ($state & self::STATE_INIT) {
-				$s .= 'INIT';
-			} else if ($state & self::STATE_TERM) {
-				$s .= 'TERM';
-			} else if ($state & self::STATE_WAIT) {
-				$s .= 'WAIT';
-			} else if ($state & self::STATE_WORK) {
-				$s .= 'WORK';
-			}
-			$s .= "\" ($state)";
+			$s = 'Changing state to: "'
+				 . $this->getStateName($state)
+				 . "\" ($state)";
 			$this->debug(self::D_INFO . $s);
 		}
 
@@ -1048,7 +1040,7 @@ abstract class CThread extends CShell
 		// Change state
 		else {
 			$this->state = $state;
-			$wait = (bool)($state & self::STATE_WAIT);
+			$wait = (bool)($state === self::STATE_WAIT);
 			$threadId = $this->id;
 			if ($pool = $this->pool) {
 				if ($wait) {
@@ -1357,7 +1349,7 @@ abstract class CThread extends CShell
 		}
 		$postfix = '';
 		if ($data !== null) {
-			$postfix = ' (with data)';
+			$debug && $postfix = ' (with data)';
 			$this->preparePacketData($packet, $data);
 		}
 		$debug && $this->debug(self::D_IPC . " <= Sending packet$postfix to parent: [$packet]");
@@ -1492,6 +1484,8 @@ abstract class CThread extends CShell
 				$data = unserialize($data);
 			}
 		}
+		// Raw (not serialized) data in packet
+		// else {}
 	}
 
 
@@ -1685,13 +1679,13 @@ abstract class CThread extends CShell
 		$res = false;
 		if ($this->isForked) {
 			if ($this->getIsAlive()) {
-				if ($this->debug) {
+				if ($debug = $this->debug) {
 					$do = ($signo == SIGSTOP || $signo == SIGKILL) ? 'Kill' : 'Stop';
 					$this->debug(self::D_INFO . "$do worker");
 				}
 				$this->sendSignalToChild($signo);
 				if ($wait) {
-					$this->debug(self::D_INFO . 'Waiting for the child');
+					$debug && $this->debug(self::D_INFO . 'Waiting for the child');
 					$pid = $this->child_pid;
 					if ($signo == SIGSTOP) {
 						$i = 15;
@@ -1758,7 +1752,7 @@ abstract class CThread extends CShell
 			return;
 		}
 
-		$time = CShell::getLogTime();
+		$time = self::getLogTime();
 		$role = $this->isChild ? 'W' : 'M'; // Master|Worker
 		$message = "{$time} [debug] [T{$this->id}.{$role}] #{$this->pid}: {$message}";
 
@@ -1777,7 +1771,7 @@ abstract class CThread extends CShell
 			return;
 		}
 
-		$time = CShell::getLogTime();
+		$time = self::getLogTime();
 		$role = $thread->isChild ? 'W' : 'M'; // Master|Worker
 		$message = "{$time} [debug] [T-.{$role}] #{$thread->pid}: {$message}";
 

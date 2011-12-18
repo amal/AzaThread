@@ -59,8 +59,7 @@ $thread = new TestThreadReturnFirstArgument();
 for ($i = 0; $i < $num; $i++) {
 	$value = $i;
 	// Run task and wait for the result
-	$thread->run($value)->wait();
-	if ($thread->getSuccess()) {
+	if ($thread->run($value)->wait()->getSuccess()) {
 		// Success
 		$result = $thread->getResult();
 		echo 'result: ' . $result . PHP_EOL;

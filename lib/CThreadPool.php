@@ -1,13 +1,15 @@
 <?php
 
+// TODO: Events through pool
+
 /**
  * Thread pool.
  *
  * @project Anizoptera CMF
  * @package system.thread
- * @version $Id: CThreadPool.php 2893 2011-12-12 22:50:16Z samally $
+ * @version $Id: CThreadPool.php 2901 2011-12-15 07:27:58Z samally $
  */
-class CThreadPool extends CShell
+class CThreadPool
 {
 	/**
 	 * All started pools count
