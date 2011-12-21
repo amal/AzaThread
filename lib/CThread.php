@@ -6,7 +6,6 @@
  *
  * @project Anizoptera CMF
  * @package system.thread
- * @version $Id: CThread.php 2917 2011-12-16 22:47:10Z samally $
  */
 abstract class CThread extends CShell
 {
@@ -862,15 +861,20 @@ abstract class CThread extends CShell
 			}
 		}
 		// Parent
-		else if (!empty($this->listeners[$event])) {
-			/** @var $listener callback */
-			foreach ($this->listeners[$event] as $l) {
-				list($listener, $arg) = $l;
-				if (!is_array($listener)) {
-					$listener($event, $data, $arg);
-				} else {
-					call_user_func($listener, $event, $data, $arg);
+		else {
+			if (!empty($this->listeners[$event])) {
+				/** @var $cb callback */
+				foreach ($this->listeners[$event] as $l) {
+					list($cb, $arg) = $l;
+					if ($cb instanceof Closure) {
+						$cb($event, $data, $arg);
+					} else {
+						call_user_func($cb, $event, $data, $arg);
+					}
 				}
+			}
+			if ($pool = $this->pool) {
+				$pool->trigger($event, $this->id, $data);
 			}
 		}
 	}

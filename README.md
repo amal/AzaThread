@@ -3,18 +3,16 @@ CThread
 
 https://github.com/amal/CThread
 
-
 CThread is a simple and powerful threads emulation component for PHP.
-
-The library uses forks to operate asynchronously and libevent with socket pairs for main inter-process communication. Also it can use five variants of data transfering (for processing arguments, results and event data) between processes and automatically selects the best of them: igbinary serialized data through sockets, php serialized data through sockets, System V Memory queue (sysvmsg), System V shared memory (sysvshm), Shared memory (shmop).
-
 
 Main features and possibilites:
 
-* Uses [forks](http://php.net/pcntl-fork);
+* Uses [forks](http://php.net/pcntl-fork) to operate asynchronously;
 * Synchronous compatibility mode if there no required extensions;
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
+* Uses [libevent](http://php.net/libevent) with socket pairs for inter-process communication;
+* Supports five variants of data transfering (for processing arguments, results and event data) between processes and automatically selects the best of them: igbinary serialized data through sockets, php serialized data through sockets, System V Memory queue (sysvmsg), System V shared memory (sysvshm), Shared memory (shmop).
 * Transfer of events between the "thread" and the parent process;
 * Working with a thread pool with preservation of multiple use, passing arguments and receiving results;
 * Errors handling;
@@ -63,8 +61,7 @@ class ExampleThread extends CThread
 }
 
 $thread = new ExampleThread();
-$thread->run(123)->wait();
-$result = $thread->getResult();
+$result = $thread->run(123)->wait()->getResult();
 ```
 
 Triggering events from thread

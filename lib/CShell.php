@@ -5,7 +5,6 @@
  *
  * @project Anizoptera CMF
  * @package system.cli
- * @version $Id: CShell.php 2808 2011-11-25 15:47:41Z samally $
  */
 abstract class CShell
 {
@@ -396,15 +395,6 @@ abstract class CShell
 		 */
 		SIGPROF   => 'SIGPROF',
 		/*
-		 * Information request. In 4.4 BSD and the GNU system, this signal is sent to all
-		 * the processes in the foreground process group of the controlling terminal when
-		 * the user types the STATUS character in canonical mode.;
-		 * If the process is the leader of the process group, the default action is to
-		 * print some status information about the system and what the process is doing.
-		 * Otherwise the default is to do nothing.
-		 */
-		28        => 'SIGINFO',
-		/*
 		 * Window size change. This is generated on some systems (including GNU)
 		 * when the terminal driver's record of the number of rows and columns on
 		 * the screen is changed. The default action is to ignore it.
@@ -413,6 +403,15 @@ abstract class CShell
 		 * reformat its display accordingly.
 		 */
 		SIGWINCH  => 'SIGWINCH',
+		/*
+		 * Information request. In 4.4 BSD and the GNU system, this signal is sent to all
+		 * the processes in the foreground process group of the controlling terminal when
+		 * the user types the STATUS character in canonical mode.;
+		 * If the process is the leader of the process group, the default action is to
+		 * print some status information about the system and what the process is doing.
+		 * Otherwise the default is to do nothing.
+		 */
+		28        => 'SIGINFO',
 		/*
 		 * The SIGUSR1 and SIGUSR2 signals are set aside for you to use any way you want.
 		 * They're useful for simple interprocess communication, if you write a signal
@@ -611,9 +610,9 @@ abstract class CShell
 	 * @throws AzaException
 	 *
 	 * @param int $pid
-	 * @param int $signal Kill signal
+	 * @param int $signal Kill signal (SIGTERM, SIGKILL ...)
 	 */
-	public static function killProcessTree($pid, $signal = SIGKILL)
+	public static function killProcessTree($pid, $signal = SIGTERM)
 	{
 		if ($pid < 1 || IS_WIN) {
 			return;
@@ -674,5 +673,8 @@ abstract class CShell
 	}
 }
 
-CShell::$hasForkSupport = IS_CLI && function_exists('pcntl_fork');
-CShell::$hasLibevent    = function_exists('event_base_new');
+// Need CLI environment, posix and pcntl extensions
+CShell::$hasForkSupport = IS_CLI && function_exists('pcntl_fork') && function_exists('posix_getpid');
+
+// Need libevent extension
+CShell::$hasLibevent = function_exists('event_base_new');

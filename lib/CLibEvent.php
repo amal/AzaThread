@@ -9,7 +9,6 @@
  *
  * @project Anizoptera CMF
  * @package system.libevent
- * @version $Id: CLibEvent.php 2802 2011-11-24 12:22:17Z samally $
  */
 class CLibEvent extends CLibEventBasic
 {

@@ -1,13 +1,10 @@
 <?php
 
-// TODO: Events through pool
-
 /**
  * Thread pool.
  *
  * @project Anizoptera CMF
  * @package system.thread
- * @version $Id: CThreadPool.php 2901 2011-12-15 07:27:58Z samally $
  */
 class CThreadPool
 {
@@ -56,6 +53,11 @@ class CThreadPool
 	 * Waiting number
 	 */
 	protected $waitNumber;
+
+	/**
+	 * Event listeners
+	 */
+	protected $listeners = array();
 
 	/**
 	 * Threads in pool (id => thread)
@@ -215,7 +217,6 @@ class CThreadPool
 		return false;
 	}
 
-
 	/**
 	 * Waits for waiting threads in pool
 	 *
@@ -257,6 +258,7 @@ class CThreadPool
 		}
 	}
 
+
 	/**
 	 * Returns array of results by threads or false
 	 *
@@ -288,6 +290,57 @@ class CThreadPool
 			$state[$threadId] = $thread->getStateName();
 		}
 		return $state;
+	}
+
+
+	/**
+	 * Connects a listener to a given event.
+	 *
+	 * @see trigger
+	 *
+	 * @param string $event <p>
+	 * An event name.
+	 * </p>
+	 * @param callback $listener <p>
+	 * Callback to be called when the matching event occurs.
+	 * <br><tt>function(string $event_name, int $thread_id, mixed $event_data, mixed $event_arg){}</tt>
+	 * </p>
+	 * @param mixed $arg <p>
+	 * Additional argument for callback.
+	 * </p>
+	 */
+	public function bind($event, $listener, $arg = null)
+	{
+		if (!isset($this->listeners[$event])) {
+			$this->listeners[$event] = array();
+		}
+		$this->listeners[$event][] = array($listener, $arg);
+		$this->debug("New listener binded on event [$event]");
+	}
+
+	/**
+	 * Notifies all listeners of a given event.
+	 *
+	 * @see bind
+	 *
+	 * @param string $event    An event name
+	 * @param int    $threadId Id of thread that caused the event
+	 * @param mixed  $data     Event data for callback
+	 */
+	public function trigger($event, $threadId, $data = null)
+	{
+		$this->debug("Triggering event [$event]");
+		if (!empty($this->listeners[$event])) {
+			/** @var $cb callback */
+			foreach ($this->listeners[$event] as $l) {
+				list($cb, $arg) = $l;
+				if ($cb instanceof Closure) {
+					$cb($event, $threadId, $data, $arg);
+				} else {
+					call_user_func($cb, $event, $threadId, $data, $arg);
+				}
+			}
+		}
 	}
 
 

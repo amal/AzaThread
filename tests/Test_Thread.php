@@ -7,7 +7,6 @@ require_once __DIR__ . '/../inc.thread.php';
  *
  * @project Anizoptera CMF
  * @package system.cli
- * @version $Id: Test_Thread.php 2897 2011-12-13 10:48:29Z samally $
  */
 class Test_Thread extends PHPUnit_Framework_TestCase
 {
@@ -81,6 +80,7 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 		$debug = false;
 		CThread::$useForks = true;
 
+
 		foreach ($ipc_modes as $mode => $check) {
 			if ($check && !function_exists($check)) {
 				continue;
@@ -100,6 +100,9 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 			// Async pool
 			$this->processPool($debug);
 
+			// Async pool
+			$this->processPoolEvent($debug);
+
 			// Async errorable pool
 			$this->processPoolErrorable($debug);
 		}
@@ -111,7 +114,7 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 
 
 	/**
-	 * One thread, iterations
+	 * Thread
 	 *
 	 * @param bool $debug
 	 */
@@ -142,7 +145,7 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 	}
 
 	/**
-	 * One thread, random errors, iterations
+	 * Thread, random errors
 	 *
 	 * @param bool $debug
 	 */
@@ -179,7 +182,7 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 	}
 
 	/**
-	 * One thread, events
+	 * Thread, events
 	 *
 	 * @param bool $debug
 	 */
@@ -187,8 +190,6 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 	{
 		$events = 15;
 		$num = 3;
-		$arg = mt_rand(12, 987);
-		$last = 0;
 
 		if ($debug) {
 			echo '-----------------------' , PHP_EOL,
@@ -199,6 +200,8 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 		$thread = new TestThreadEvents($debug);
 
 		$test = $this;
+		$arg = mt_rand(12, 987);
+		$last = 0;
 		$cb = function($event, $e_data, $e_arg) use ($arg, $test, &$last) {
 			/** @var $test Test_Thread */
 			$test->assertEquals($arg, $e_arg);
@@ -222,7 +225,7 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 	}
 
 	/**
-	 * One pool
+	 * Pool
 	 *
 	 * @param bool $debug
 	 */
@@ -271,7 +274,67 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 	}
 
 	/**
-	 * One pool
+	 * Pool, events
+	 *
+	 * @param bool $debug
+	 */
+	function processPoolEvent($debug)
+	{
+		$events  = 5;
+		$num     = 15;
+		$threads = 3;
+
+		if ($debug) {
+			echo '-----------------------' , PHP_EOL,
+			'Thread pool events test: ' , (CThread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
+			'-----------------------', PHP_EOL;
+		}
+
+		$pool = new CThreadPool('TestThreadEvents', $threads, null, $debug);
+
+		$test = $this;
+		$arg  = mt_rand(12, 987);
+		$jobs = array();
+		$cb = function($event, $threadId, $e_data, $e_arg) use ($arg, $test, &$jobs) {
+			/** @var $test Test_Thread */
+			$test->assertEquals($arg, $e_arg);
+			$test->assertEquals(TestThreadEvents::EV_PROCESS, $event);
+			$test->assertTrue(isset($jobs[$threadId]));
+			$test->assertEquals($jobs[$threadId]++, $e_data);
+		};
+		$pool->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
+
+
+		$i = 0;
+		$left = $num;
+		$maxI = ceil($num * 1.5);
+		do {
+			while ($pool->hasWaiting() && $left > 0) {
+				if (!$threadId = $pool->run($events)) {
+					throw new Exception('Pool slots error');
+				}
+				$this->assertTrue(!isset($jobs[$threadId]));
+				$jobs[$threadId] = 0;
+				$left--;
+			}
+			if ($results = $pool->wait()) {
+				foreach ($results as $threadId => $res) {
+					$num--;
+					$this->assertTrue(isset($jobs[$threadId]));
+					$this->assertEquals($events, $jobs[$threadId]);
+					unset($jobs[$threadId]);
+				}
+			}
+			$i++;
+		} while ($num > 0 && $i < $maxI);
+
+		$this->assertEquals(0, $num);
+
+		$pool->cleanup();
+	}
+
+	/**
+	 * Pool, errors
 	 *
 	 * @param bool $debug
 	 */

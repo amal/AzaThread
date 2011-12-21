@@ -9,7 +9,6 @@
  *
  * @project Anizoptera CMF
  * @package system.ipc
- * @version $Id: CIpcQueue.php 2885 2011-12-11 21:34:47Z samally $
  */
 class CIpcQueue
 {

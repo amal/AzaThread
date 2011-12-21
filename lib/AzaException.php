@@ -5,7 +5,6 @@
  *
  * @project Anizoptera CMF
  * @package system.exceptions
- * @version $Id: AzaException.php 2381 2011-06-21 10:55:20Z samally $
  */
 class AzaException extends RuntimeException
 {
