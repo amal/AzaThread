@@ -50,6 +50,18 @@ class TestThreadEvents extends CThread
 }
 
 
+// Checks
+if (!CThread::$useForks) {
+	echo PHP_EOL . "You do not have the minimum system requirements to work in async mode!!!";
+	if (!CShell::$hasForkSupport) {
+		echo PHP_EOL . "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
+	}
+	if (!CShell::$hasLibevent) {
+		echo PHP_EOL . "You don't have libevent extension installed!";
+	}
+	echo PHP_EOL;
+}
+
 
 // ----------------------------------------------
 echo PHP_EOL . 'Simple example with one thread' . PHP_EOL;
@@ -102,10 +114,10 @@ echo PHP_EOL . "Simple example with pool of threads ($threads)" . PHP_EOL;
 
 $pool = new CThreadPool('TestThreadReturnFirstArgument', $threads);
 
-$num = 25;		// Number of tasks
+$num  = 25;		// Number of tasks
 $left = $num;	// Number of remaining tasks
 do {
-	while ($pool->hasWaiting() && $left > 0) {
+	while ($left > 0 && $pool->hasWaiting()) {
 		if (!$threadId = $pool->run($left)) {
 			throw new Exception('Pool slots error');
 		}
@@ -123,6 +135,50 @@ do {
 		// when worked or working timeout exceeded
 		foreach ($failed as $threadId) {
 			echo 'error' . PHP_EOL;
+			$left++;
+		}
+	}
+} while ($num > 0);
+$pool->cleanup();
+
+
+
+// ----------------------------------------------
+$threads  = 8;
+$jobs     = range(1, 30);
+$jobs_num = count($jobs);
+
+echo PHP_EOL . "Example with pool of threads ($threads) and pool of jobs ($jobs_num)" . PHP_EOL;
+
+$pool = new CThreadPool('TestThreadReturnFirstArgument', $threads);
+
+$num     = $jobs_num; // Number of tasks
+$left    = $jobs_num; // Number of remaining tasks
+$started = array();
+do {
+	while ($left > 0 && $pool->hasWaiting()) {
+		$task = array_shift($jobs);
+		if (!$threadId = $pool->run($task)) {
+			throw new Exception('Pool slots error');
+		}
+		$started[$threadId] = $task;
+		$left--;
+	}
+	if ($results = $pool->wait($failed)) {
+		foreach ($results as $threadId => $result) {
+			unset($started[$threadId]);
+			$num--;
+			echo 'result: ' . $result . PHP_EOL;
+		}
+	}
+	if ($failed) {
+		// Error handling here
+		// processing is not successful if thread dies
+		// when worked or working timeout exceeded
+		foreach ($failed as $threadId) {
+			$jobs[] = $started[$threadId];
+			echo 'error: ' . $started[$threadId] . PHP_EOL;
+			unset($started[$threadId]);
 			$left++;
 		}
 	}

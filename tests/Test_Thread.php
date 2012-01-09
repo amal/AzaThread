@@ -244,11 +244,11 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 
 		$jobs = array();
 
-		$i = 0;
+		$i    = 0;
 		$left = $num;
 		$maxI = ceil($num * 1.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = mt_rand(1000000, 20000000);
 				if (!$threadId = $pool->run($arg)) {
 					throw new Exception('Pool slots error');
@@ -305,11 +305,11 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 		$pool->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
 
 
-		$i = 0;
+		$i    = 0;
 		$left = $num;
 		$maxI = ceil($num * 1.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				if (!$threadId = $pool->run($events)) {
 					throw new Exception('Pool slots error');
 				}
@@ -353,12 +353,12 @@ class Test_Thread extends PHPUnit_Framework_TestCase
 
 		$jobs = array();
 
-		$i = 0;
-		$j = 0;
+		$i    = 0;
+		$j    = 0;
 		$left = $num;
 		$maxI = ceil($num * 2.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = mt_rand(1000000, 20000000);
 				if (!$threadId = $pool->run($arg, $j)) {
 					throw new Exception('Pool slots error');
