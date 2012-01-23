@@ -97,6 +97,7 @@ $thread->run($events)->wait();
 Use pool with 8 threads
 
 ```php
+$threads = 8  // Number of threads
 $pool = new CThreadPool('ExampleThread', $threads);
 
 $num = 25;    // Number of tasks
