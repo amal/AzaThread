@@ -8,7 +8,7 @@ CThread is a simple and powerful threads emulation component for PHP.
 Main features and possibilites:
 
 * Uses [forks](http://php.net/pcntl-fork) to operate asynchronously;
-* Synchronous compatibility mode if there no required extensions;
+* Synchronous compatibility mode if there are no required extensions;
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
 * Uses [libevent](http://php.net/libevent) with socket pairs for inter-process communication;
@@ -133,7 +133,7 @@ do {
 $pool->cleanup();
 ```
 
-Another examples you can see in the example file ([example.php](https://github.com/amal/CThread/blob/master/example.php)) and unit test ([tests/Test_Thread.php](https://github.com/amal/CThread/blob/master/tests/Test_Thread.php)).
+Other examples can be seen in the example file ([example.php](https://github.com/amal/CThread/blob/master/example.php)) and unit test ([tests/Test_Thread.php](https://github.com/amal/CThread/blob/master/tests/Test_Thread.php)).
 
 You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/CThread/blob/master/test.php).
 
