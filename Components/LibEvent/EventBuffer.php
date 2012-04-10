@@ -1,41 +1,47 @@
 <?php
 
+namespace Aza\Components\LibEvent;
+use Aza\Components\LibEvent\Exceptions\Exception;
+
 /**
- * Class LibEventBuffer
+ * LibEvent buffered event resourse wrapper
  *
  * @link http://www.wangafu.net/~nickm/libevent-book/
  *
  * @uses libevent
  *
  * @project Anizoptera CMF
- * @package system.libevent
+ * @package system.AzaLibEvent
+ * @version $Id: EventBuffer.php 3259 2012-04-10 13:00:16Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-class CLibEventBuffer extends CLibEventBasic
+class EventBuffer extends EventBasic
 {
 	/**
 	 * Buffer read error
 	 */
-	const E_READ	= 0x01; // EVBUFFER_READ
+	const E_READ = 0x01; // EVBUFFER_READ
 
 	/**
 	 * Buffer write error
 	 */
-	const E_WRITE	= 0x02; // EVBUFFER_WRITE
+	const E_WRITE = 0x02; // EVBUFFER_WRITE
 
 	/**
 	 * Buffer EOF error
 	 */
-	const E_EOF		= 0x10; // EVBUFFER_EOF
+	const E_EOF = 0x10; // EVBUFFER_EOF
 
 	/**
 	 * Buffer error
 	 */
-	const E_ERROR	= 0x20; // EVBUFFER_ERROR
+	const E_ERROR = 0x20; // EVBUFFER_ERROR
 
 	/**
 	 * Buffer timeout error
 	 */
-	const E_TIMEOUT	= 0x40; // EVBUFFER_TIMEOUT
+	const E_TIMEOUT = 0x40; // EVBUFFER_TIMEOUT
 
 
 	/**
@@ -43,28 +49,28 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see setWatermark
 	 */
-	const DEF_LOWMARK       = 1;
+	const DEF_LOWMARK = 1;
 
 	/**
 	 * Default <i>highmark</i>
 	 *
 	 * @see setWatermark
 	 */
-	const DEF_HIGHMARK      = 0xffffff;
+	const DEF_HIGHMARK = 0xffffff;
 
 	/**
 	 * Default priority
 	 *
 	 * @see setPriority
 	 */
-	const DEF_PRIORITY      = 10;
+	const DEF_PRIORITY = 10;
 
 	/**
 	 * Default read timeout
 	 *
 	 * @see setTimout
 	 */
-	const DEF_TIMEOUT_READ  = 30;
+	const DEF_TIMEOUT_READ = 30;
 
 	/**
 	 * Default write timeout
@@ -85,22 +91,22 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_new
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param resource $stream <p>
 	 * Valid PHP stream resource. Must be castable to file descriptor.
 	 * </p>
 	 * @param callback|null $readcb <p>
 	 * Callback to invoke where there is data to read, or NULL if no callback is desired.
-	 * <br><tt>function(resource $buf, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param callback|null $writecb <p>
 	 * Callback to invoke where the descriptor is ready for writing, or NULL if no callback is desired.
-	 * <br><tt>function(resource $buf, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param callback $errorcb <p>
 	 * Callback to invoke where there is an error on the descriptor, cannot be NULL.
-	 * <br><tt>function(resource $buf, int $what, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, int $what, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param mixed $arg [optional] <p>
 	 * An argument that will be passed to each of the callbacks.
@@ -111,7 +117,7 @@ class CLibEventBuffer extends CLibEventBasic
 		parent::__construct();
 		$this->stream = $stream;
 		if (!$this->resource = event_buffer_new($stream, $readcb, $writecb, $errorcb, array($this, $arg))) {
-			throw new AzaException('Can\'t create new buffered event resourse (event_buffer_new)', 1);
+			throw new Exception("Can't create new buffered event resourse (event_buffer_new)");
 		}
 	}
 
@@ -121,17 +127,17 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_disable
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $events Any combination of EV_READ and EV_WRITE.
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function disable($events)
 	{
 		$this->checkResourse();
 		if (!event_buffer_disable($this->resource, $events)) {
-			throw new AzaException("Can't disable buffered event (event_buffer_disable)", 1);
+			throw new Exception("Can't disable buffered event (event_buffer_disable)");
 		}
 		return $this;
 	}
@@ -141,17 +147,17 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_enable
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $events Any combination of EV_READ and EV_WRITE.
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function enable($events)
 	{
 		$this->checkResourse();
 		if (!event_buffer_enable($this->resource, $events)) {
-			throw new AzaException("Can't enable buffered event (event_buffer_enable)", 1);
+			throw new Exception("Can't enable buffered event (event_buffer_enable)");
 		}
 		return $this;
 	}
@@ -162,18 +168,18 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_base_set
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
-	 * @param CLibEventBase $event_base
+	 * @param EventBase $event_base
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function setBase($event_base)
 	{
 		$this->checkResourse();
 		$event_base->checkResourse();
 		if (!event_buffer_base_set($this->resource, $event_base->resource)) {
-			throw new AzaException('Can\'t set buffered event base (event_buffer_base_set)', 1);
+			throw new Exception("Can't set buffered event base (event_buffer_base_set)");
 		}
 		return parent::setBase($event_base);
 	}
@@ -183,16 +189,16 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_free
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function free()
 	{
+		parent::free();
 		if ($this->resource) {
 			event_buffer_free($this->resource);
 			$this->resource = null;
-			parent::free();
 		}
 		return $this;
 	}
@@ -218,18 +224,18 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_write
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param string $data      The data to be written.
 	 * @param int    $data_size Optional size parameter. Writes all the data by default
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function write($data, $data_size = -1)
 	{
 		$this->checkResourse();
 		if (!event_buffer_write($this->resource, $data, $data_size)) {
-			throw new AzaException('Can\'t write data to the buffered event (event_buffer_write)', 1);
+			throw new Exception("Can't write data to the buffered event (event_buffer_write)");
 		}
 		return $this;
 	}
@@ -240,17 +246,17 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_fd_set
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param resource $stream Valid PHP stream, must be castable to file descriptor.
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function setStream($stream)
 	{
 		$this->checkResourse();
 		if (!event_buffer_fd_set($this->resource, $stream)) {
-			throw new AzaException("Can't set buffered event stream (event_buffer_fd_set)", 1);
+			throw new Exception("Can't set buffered event stream (event_buffer_fd_set)");
 		}
 		$this->stream = $stream;
 		return $this;
@@ -261,31 +267,31 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_set_callback
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param callback|null $readcb <p>
 	 * Callback to invoke where there is data to read, or NULL if no callback is desired.
-	 * <br><tt>function(resource $buf, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param callback|null $writecb <p>
 	 * Callback to invoke where the descriptor is ready for writing, or NULL if no callback is desired.
-	 * <br><tt>function(resource $buf, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param callback $errorcb <p>
 	 * Callback to invoke where there is an error on the descriptor, cannot be NULL.
-	 * <br><tt>function(resource $buf, int $what, array $args(CLibEventBuffer $e, mixed $arg)){}</tt>
+	 * <br><tt>function(resource $buf, int $what, array $args(EventBuffer $e, mixed $arg))</tt>
 	 * </p>
 	 * @param mixed $arg [optional] <p>
 	 * An argument that will be passed to each of the callbacks.
 	 * </p>
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function setCallback($readcb, $writecb, $errorcb, $arg = null)
 	{
 		$this->checkResourse();
 		if (!event_buffer_set_callback($this->resource, $readcb, $writecb, $errorcb, array($this, $arg))) {
-			throw new AzaException("Can't set buffered event callbacks (event_buffer_set_callback)", 1);
+			throw new Exception("Can't set buffered event callbacks (event_buffer_set_callback)");
 		}
 		return $this;
 	}
@@ -296,14 +302,15 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_timeout_set
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $read_timeout  Read timeout (in seconds).
 	 * @param int $write_timeout Write timeout (in seconds).
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
-	public function setTimout($read_timeout = self::DEF_TIMEOUT_READ, $write_timeout = self::DEF_TIMEOUT_WRITE)
+	public function setTimout($read_timeout = self::DEF_TIMEOUT_READ,
+		$write_timeout = self::DEF_TIMEOUT_WRITE)
 	{
 		$this->checkResourse();
 		event_buffer_timeout_set($this->resource, $read_timeout, $write_timeout);
@@ -320,13 +327,13 @@ class CLibEventBuffer extends CLibEventBasic
 	 *
 	 * @see event_buffer_timeout_set
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $events   Any combination of EV_READ and EV_WRITE.
 	 * @param int $lowmark  Low watermark.
 	 * @param int $highmark High watermark.
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function setWatermark($events, $lowmark = self::DEF_LOWMARK, $highmark = self::DEF_HIGHMARK)
 	{
@@ -345,13 +352,15 @@ class CLibEventBuffer extends CLibEventBasic
 	 * maximum priority level of the event base (see {@link event_base_priority_init}()).
 	 * </p>
 	 *
-	 * @return CLibEventBuffer
+	 * @return self
 	 */
 	public function setPriority($value = self::DEF_PRIORITY)
 	{
 		$this->checkResourse();
 		if (!event_buffer_priority_set($this->resource, $value)) {
-			throw new AzaException("Can't set buffered event priority to $value (event_buffer_priority_set)", 1);
+			throw new Exception(
+				"Can't set buffered event priority to {$value} (event_buffer_priority_set)"
+			);
 		}
 		return $this;
 	}

@@ -1,5 +1,9 @@
 <?php
 
+namespace Aza\Components\LibEvent;
+use Aza\Components\LibEvent\Exceptions\Exception;
+use Aza\Components\Cli\Base;
+
 /**
  * LibEvent "basic" event functionality
  *
@@ -8,9 +12,12 @@
  * @uses libevent
  *
  * @project Anizoptera CMF
- * @package system.libevent
+ * @package system.AzaLibEvent
+ * @version $Id: EventBasic.php 3259 2012-04-10 13:00:16Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-abstract class CLibEventBasic
+abstract class EventBasic
 {
 	/**
 	 * Unique event IDs counter
@@ -20,7 +27,7 @@ abstract class CLibEventBasic
 	private static $counter = 0;
 
 	/**
-	 * Unique event ID
+	 * Unique (for current process) event ID
 	 *
 	 * @var int
 	 */
@@ -34,7 +41,7 @@ abstract class CLibEventBasic
 	public $resource;
 
 	/**
-	 * @var CLibEventBase
+	 * @var EventBase
 	 */
 	public $base;
 
@@ -42,17 +49,18 @@ abstract class CLibEventBasic
 	/**
 	 * Creates a new event resource.
 	 *
-	 * @throws AzaException if Libevent isn't available
+	 * @throws Exception if Libevent isn't available
 	 */
 	public function __construct()
 	{
-//		if (!function_exists('event_base_new')) {
-		if (!CShell::$hasLibevent) {
-			throw new AzaException('You need to install PECL extension "Libevent" to use this class', 2);
+		if (!Base::$hasLibevent) {
+			throw new Exception(
+				'You need to install PECL extension "Libevent" to use this class'
+			);
 		}
-
 		$this->id = ++self::$counter;
 	}
+
 
 	/**
 	 * Desctructor
@@ -60,21 +68,6 @@ abstract class CLibEventBasic
 	public function __destruct()
 	{
 		$this->resource && $this->free();
-	}
-
-
-	/**
-	 * Associate buffered event with an event base
-	 *
-	 * @param CLibEventBase $event_base
-	 *
-	 * @return CLibEventBasic
-	 */
-	public function setBase($event_base)
-	{
-		$this->base = $event_base;
-		$event_base->events[$this->id] = $this;
-		return $this;
 	}
 
 	/**
@@ -90,14 +83,29 @@ abstract class CLibEventBasic
 
 
 	/**
+	 * Associate buffered event with an event base
+	 *
+	 * @param EventBase $event_base
+	 *
+	 * @return static
+	 */
+	public function setBase($event_base)
+	{
+		$this->base = $event_base;
+		$event_base->events[$this->id] = $this;
+		return $this;
+	}
+
+
+	/**
 	 * Checks event resource.
 	 *
-	 * @throws AzaException if resource is already freed
+	 * @throws Exception if resource is already freed
 	 */
 	protected function checkResourse()
 	{
 		if (!$this->resource) {
-			throw new AzaException('Can\'t use event resource. It\'s already freed.', 2);
+			throw new Exception("Can't use event resource. It's already freed.");
 		}
 	}
 }

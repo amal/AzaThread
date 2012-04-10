@@ -1,16 +1,23 @@
 <?php
 
+namespace Aza\Components\LibEvent;
+use Aza\Components\LibEvent\Exceptions\Exception;
+use Aza\Components\Cli\Base;
+
 /**
- * LibEventBase resourse wrapper
+ * LibEvent base resourse wrapper
  *
  * @link http://www.wangafu.net/~nickm/libevent-book/
  *
  * @uses libevent
  *
  * @project Anizoptera CMF
- * @package system.libevent
+ * @package system.AzaLibEvent
+ * @version $Id: EventBase.php 3259 2012-04-10 13:00:16Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-class CLibEventBase
+class EventBase
 {
 	/**
 	 * Default priority
@@ -18,6 +25,7 @@ class CLibEventBase
 	 * @see priorityInit
 	 */
 	const MAX_PRIORITY = 30;
+
 
 	/**
 	 * Unique base IDs counter
@@ -43,65 +51,133 @@ class CLibEventBase
 	/**
 	 * Events
 	 *
-	 * @var CLibEventBasic[]
+	 * @var Event[]|EventBuffer[]
 	 */
 	public $events = array();
 
 	/**
-	 * Timers
+	 * Array of timers settings
 	 *
 	 * @var array[]
 	 */
-	public $timers = array();
+	protected $timers = array();
 
 
+
+	/**
+	 * Initializes instance
+	 *
+	 * @see event_base_new
+	 *
+	 * @throws Exception
+	 *
+	 * @param bool $initPriority Whether to init priority with default value
+	 */
+	public function __construct($initPriority = true)
+	{
+		$this->init($initPriority);
+		$this->id = ++self::$counter;
+	}
 
 	/**
 	 * Create and initialize new event base
 	 *
 	 * @see event_base_new
 	 *
-	 * @param bool $init_priority Whether to init priority with default value
+	 * @throws Exception
 	 *
-	 * @throws AzaException
+	 * @param bool $initPriority Whether to init priority with default value
 	 */
-	public function __construct($init_priority = true)
+	protected function init($initPriority = true)
 	{
-//		if (!function_exists('event_base_new')) {
-		if (!CShell::$hasLibevent) {
-			throw new AzaException('You need to install PECL extension "Libevent" to use this class', 1);
+		if (!Base::$hasLibevent) {
+			throw new Exception('You need to install PECL extension "Libevent" to use this class');
+		} else if (!$this->resource = event_base_new()) {
+			throw new Exception("Can't create event base resourse (event_base_new)");
 		}
-		if (!$this->resource = event_base_new()) {
-			throw new AzaException('Can\'t create event base resourse (event_base_new)', 1);
-		}
-		$this->id = ++self::$counter;
-		if ($init_priority) {
-			$this->priorityInit();
-		}
+		$initPriority && $this->priorityInit();
 	}
+
+	/**
+	 * Reinitializes event base and cleans all
+	 * attached events and timers without destroying
+	 * resources in parent process.
+	 *
+	 * Use this method after fork in child!
+	 *
+	 * @param bool $initPriority Whether to init priority with default value
+	 *
+	 * @return self
+	 */
+	public function reinitialize($initPriority = true)
+	{
+		foreach ($this->events as $e) {
+			if ($e instanceof Event) {
+				$e->free();
+			}
+			// We do not free the buffered events -
+			// it damages the resources in the parent.
+			// PHP will free instances and resources on the end of the process
+		}
+		$this->events = $this->timers = array();
+		$this->init($initPriority);
+		return $this;
+	}
+
 
 	/**
 	 * Desctructor
 	 */
 	public function __destruct()
 	{
+		$this->resource && $this->free();
+	}
+
+	/**
+	 * Destroys the specified event_base and frees all the resources associated.
+	 * Note that it's not possible to destroy an event base with events attached to it.
+	 *
+	 * @see event_base_free
+	 *
+	 * @return self
+	 */
+	public function free()
+	{
 		if ($this->resource) {
-			$this->free();
+			$this->freeAttachedEvents();
+			@event_base_free($this->resource);
+			$this->resource = null;
 		}
+		return $this;
+	}
+
+	/**
+	 * Frees all attached timers and events
+	 *
+	 * @return self
+	 */
+	public function freeAttachedEvents()
+	{
+		foreach ($this->events as $e) {
+			$e->free();
+		}
+		$this->events =
+		$this->timers = array();
+		return $this;
 	}
 
 
 	/**
 	 * Associate event base with an event (or buffered event).
 	 *
-	 * @see CLibEvent::setBase
-	 * @see CLibEventBuffer::setBase
+	 * @see Event::setBase
+	 * @see EventBuffer::setBase
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
-	 * @param CLibEventBasic $event
+	 * @param EventBasic $event
 	 *
-	 * @return CLibEventBase
+	 * @return self
 	 */
 	public function setEvent($event)
 	{
@@ -111,32 +187,11 @@ class CLibEventBase
 
 
 	/**
-	 * Destroys the specified event_base and frees all the resources associated.
-	 * Note that it's not possible to destroy an event base with events attached to it.
-	 *
-	 * @see event_base_free
-	 *
-	 * @return CLibEventBase
-	 */
-	public function free()
-	{
-		if ($this->resource) {
-			foreach ($this->events as $e) {
-				$e->free();
-			}
-			@event_base_free($this->resource);
-			$this->resource = null;
-		}
-		return $this;
-	}
-
-
-	/**
 	 * Starts event loop for the specified event base.
 	 *
 	 * @see event_base_loop
 	 *
-	 * @throws AzaException if error
+	 * @throws Exception if error
 	 *
 	 * @param int $flags Optional parameter, which can take any combination of EVLOOP_ONCE and EVLOOP_NONBLOCK.
 	 *
@@ -147,7 +202,7 @@ class CLibEventBase
 		$this->checkResourse();
 		$res = event_base_loop($this->resource, $flags);
 		if ($res === -1) {
-			throw new AzaException('Can\'t start base loop (event_base_loop)', 1);
+			throw new Exception("Can't start base loop (event_base_loop)");
 		}
 		return $res;
 	}
@@ -157,15 +212,15 @@ class CLibEventBase
 	 *
 	 * @see event_base_loopbreak
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
-	 * @return CLibEventBase
+	 * @return self
 	 */
 	public function loopBreak()
 	{
 		$this->checkResourse();
 		if (!event_base_loopbreak($this->resource)) {
-			throw new AzaException('Can\'t break loop (event_base_loopbreak)', 1);
+			throw new Exception("Can't break loop (event_base_loopbreak)");
 		}
 		return $this;
 	}
@@ -175,17 +230,17 @@ class CLibEventBase
 	 *
 	 * @see event_base_loopexit
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $timeout Optional timeout parameter (in microseconds).
 	 *
-	 * @return CLibEventBase
+	 * @return self
 	 */
 	public function loopExit($timeout = -1)
 	{
 		$this->checkResourse();
 		if (!event_base_loopexit($this->resource, $timeout)) {
-			throw new AzaException('Can\'t set loop exit timeout (event_base_loopexit)', 1);
+			throw new Exception("Can't set loop exit timeout (event_base_loopexit)");
 		}
 		return $this;
 	}
@@ -196,18 +251,20 @@ class CLibEventBase
 	 *
 	 * @see event_base_priority_init
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param int $value
 	 *
-	 * @return CLibEventBase
+	 * @return self
 	 */
 	public function priorityInit($value = self::MAX_PRIORITY)
 	{
 		$this->checkResourse();
 		if (!event_base_priority_init($this->resource, ++$value)) {
-			$msg = "Can't set the maximum priority level of the event base to $value (event_base_priority_init)";
-			throw new AzaException($msg, 1);
+			throw new Exception(
+				"Can't set the maximum priority level of the event base"
+				." to {$value} (event_base_priority_init)"
+			);
 		}
 		return $this;
 	}
@@ -216,12 +273,12 @@ class CLibEventBase
 	/**
 	 * Checks event base resource.
 	 *
-	 * @throws AzaException if resource is already freed
+	 * @throws Exception if resource is already freed
 	 */
 	public function checkResourse()
 	{
 		if (!$this->resource) {
-			throw new AzaException('Can\'t use event base resource. It\'s already freed.', 2);
+			throw new Exception("Can't use event base resource. It's already freed.");
 		}
 	}
 
@@ -229,13 +286,13 @@ class CLibEventBase
 	/**
 	 * Adds a new named timer to the base or customize existing.
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
 	 * @param string $name Timer name
 	 * @param int  $interval Interval
 	 * @param callback $callback <p>
 	 * Callback function to be called when the interval expires.<br/>
-	 * <tt>function(CLibEventBase $event_base, string $timer_name, int $iteration, mixed $arg){}</tt><br/>
+	 * <tt>function(string $timer_name, mixed $arg, int $iteration, EventBase $event_base){}</tt><br/>
 	 * If callback will return FALSE timer will not be added again for next iteration.
 	 * </p>
 	 * @param mixed $arg   Additional timer argument
@@ -247,11 +304,11 @@ class CLibEventBase
 		$notExists = !isset($this->timers[$name]);
 
 		if (($notExists || $callback) && !is_callable($callback, false, $callableName)) {
-			throw new AzaException("Incorrect callback [$callableName] for timer ($name).", 1);
+			throw new Exception("Incorrect callback '{$callableName}' for timer ({$name}).");
 		}
 
 		if ($notExists) {
-			$event = new CLibEvent();
+			$event = new Event();
 			$event->setTimer(array($this, '_onTimer'), $name)
 					->setBase($this);
 			$this->timers[$name] = array(
@@ -295,7 +352,7 @@ class CLibEventBase
 	public function timerStart($name, $interval = null, $arg = null, $resetIteration = true)
 	{
 		if (!isset($this->timers[$name])) {
-			throw new AzaException("Unknown timer \"$name\". Add timer before using.", 1);
+			throw new Exception("Unknown timer '{$name}'. Add timer before using.");
 		}
 		$timer = &$this->timers[$name];
 		if ($resetIteration) {
@@ -307,7 +364,7 @@ class CLibEventBase
 		if ($interval > 1) {
 			$timer['interval'] = $interval;
 		}
-		/** @var $event CLibEvent */
+		/** @var $event Event */
 		$event = $timer['event'];
 		$event->add($timer['interval'] * $timer['q']);
 	}
@@ -326,7 +383,7 @@ class CLibEventBase
 			return;
 		}
 		$timer = &$this->timers[$name];
-		/** @var $event CLibEvent */
+		/** @var $event Event */
 		$event = $timer['event'];
 		$event->del();
 		$timer['i'] = 0;
@@ -343,7 +400,7 @@ class CLibEventBase
 			return;
 		}
 		$timer = &$this->timers[$name];
-		/** @var $event CLibEvent */
+		/** @var $event Event */
 		$event = $timer['event'];
 		$event->free();
 		unset($this->timers[$name]);
@@ -364,7 +421,7 @@ class CLibEventBase
 	/**
 	 * Timer callback
 	 *
-	 * @see CLibEvent::setTimer
+	 * @see Event::setTimer
 	 *
 	 * @param null  $fd
 	 * @param int   $event EV_TIMEOUT
@@ -381,7 +438,7 @@ class CLibEventBase
 
 		// Invoke callback
 		$timer = &$this->timers[$name];
-		$res = call_user_func($timer['callback'], $this, $name, ++$timer['i'], $timer['arg']);
+		$res = call_user_func($timer['callback'], $name, $timer['arg'], ++$timer['i'], $this);
 		if ($res) {
 			$this->timerStart($name, null, null, false);
 		} else {

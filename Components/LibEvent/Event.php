@@ -1,16 +1,23 @@
 <?php
 
+namespace Aza\Components\LibEvent;
+use Aza\Components\LibEvent\Exceptions\Exception;
+use Aza\Components\Cli\Base;
+
 /**
- * LibEvent resourse wrapper
+ * LibEvent event resourse wrapper
  *
  * @link http://www.wangafu.net/~nickm/libevent-book/
  *
  * @uses libevent
  *
  * @project Anizoptera CMF
- * @package system.libevent
+ * @package system.AzaLibEvent
+ * @version $Id: Event.php 3259 2012-04-10 13:00:16Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-class CLibEvent extends CLibEventBasic
+class Event extends EventBasic
 {
 	/**
 	 * Event resource
@@ -20,7 +27,7 @@ class CLibEvent extends CLibEventBasic
 	public $resource;
 
 	/**
-	 * @var CLibEventBase
+	 * @var EventBase
 	 */
 	public $base;
 
@@ -30,13 +37,13 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_new
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 */
 	public function __construct()
 	{
 		parent::__construct();
 		if (!$this->resource = event_new()) {
-			throw new AzaException('Can\'t create new event resourse (event_new)', 1);
+			throw new Exception("Can't create new event resourse (event_new)");
 		}
 	}
 
@@ -46,17 +53,17 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_add
 	 *
-	 * @throws AzaException if can't add event
+	 * @throws Exception if can't add event
 	 *
 	 * @param int $timeout Optional timeout (in microseconds).
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function add($timeout = -1)
 	{
 		$this->checkResourse();
 		if (!event_add($this->resource, $timeout)) {
-			throw new AzaException("Can't add event (event_add)", 1);
+			throw new Exception("Can't add event (event_add)");
 		}
 		return $this;
 	}
@@ -66,15 +73,15 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_del
 	 *
-	 * @throws AzaException if can't delete event
+	 * @throws Exception if can't delete event
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function del()
 	{
 		$this->checkResourse();
 		if (!event_del($this->resource)) {
-			throw new AzaException("Can't delete event (event_del)", 1);
+			throw new Exception("Can't delete event (event_del)");
 		}
 		return $this;
 	}
@@ -85,18 +92,18 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_base_set
 	 *
-	 * @throws AzaException
+	 * @throws Exception
 	 *
-	 * @param CLibEventBase $event_base
+	 * @param EventBase $event_base
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function setBase($event_base)
 	{
 		$this->checkResourse();
 		$event_base->checkResourse();
 		if (!event_base_set($this->resource, $event_base->resource)) {
-			throw new AzaException('Can\'t set event base (event_base_set)', 1);
+			throw new Exception("Can't set event base (event_base_set)");
 		}
 		return parent::setBase($event_base);
 	}
@@ -106,14 +113,15 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_free
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function free()
 	{
-		if ($this->resource) {
-			event_free($this->resource);
+		parent::free();
+		if ($res = $this->resource) {
+			event_del($res);
+			event_free($res);
 			$this->resource = null;
-			parent::free();
 		}
 		return $this;
 	}
@@ -126,7 +134,7 @@ class CLibEvent extends CLibEventBasic
 	 * @see event_add
 	 * @see event_set
 	 *
-	 * @throws AzaException if can't prepare event
+	 * @throws Exception if can't prepare event
 	 *
 	 * @param resource|mixed $fd <p>
 	 * Valid PHP stream resource. The stream must be castable to file descriptor,
@@ -139,17 +147,17 @@ class CLibEvent extends CLibEventBasic
 	 * </p>
 	 * @param callback $callback <p>
 	 * Callback function to be called when the matching event occurs.
-	 * <br><tt>function(resource|null $fd, int $events, array $arg(CLibEvent $event, mixed $arg)){}</tt>
+	 * <br><tt>function(resource|null $fd, int $events, array $arg(Event $event, mixed $arg)){}</tt>
 	 * </p>
 	 * @param mixed $arg
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function set($fd, $events, $callback, $arg = null)
 	{
 		$this->checkResourse();
 		if (!event_set($this->resource, $fd, $events, $callback, array($this, $arg))) {
-			throw new AzaException("Can't prepare event (event_set)", 1);
+			throw new Exception("Can't prepare event (event_set)");
 		}
 		return $this;
 	}
@@ -162,14 +170,14 @@ class CLibEvent extends CLibEventBasic
 	 * @see event_add
 	 * @see event_set
 	 *
-	 * @throws AzaException if can't prepare event
+	 * @throws Exception if can't prepare event
 	 *
 	 * @param int $signo <p>
 	 * Signal number
 	 * </p>
 	 * @param callback $callback <p>
 	 * Callback function to be called when the matching event occurs.
-	 * <br><tt>function(null $fd, int $events(8:EV_SIGNAL), array $arg(CLibEvent $event, mixed $arg, int $signo)){}</tt>
+	 * <br><tt>function(null $fd, int $events(8:EV_SIGNAL), array $arg(Event $event, mixed $arg, int $signo)){}</tt>
 	 * </p>
 	 * @param bool $persist <p>
 	 * Whether the event will persist until {@link event_del}() is
@@ -177,7 +185,7 @@ class CLibEvent extends CLibEventBasic
 	 * </p>
 	 * @param mixed $arg
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function setSignal($signo, $callback, $persist = true, $arg = null)
 	{
@@ -187,8 +195,8 @@ class CLibEvent extends CLibEventBasic
 			$events |= EV_PERSIST;
 		}
 		if (!event_set($this->resource, $signo, $events, $callback, array($this, $arg, $signo))) {
-			$name = CShell::signalName($signo);
-			throw new AzaException("Can't prepare event (event_set) for $name ($signo) signal", 1);
+			$name = Base::signalName($signo);
+			throw new Exception("Can't prepare event (event_set) for $name ($signo) signal");
 		}
 		return $this;
 	}
@@ -199,21 +207,21 @@ class CLibEvent extends CLibEventBasic
 	 *
 	 * @see event_timer_set
 	 *
-	 * @throws AzaException if can't prepare event
+	 * @throws Exception if can't prepare event
 	 *
 	 * @param callback $callback <p>
 	 * Callback function to be called when the interval expires.
-	 * <br><tt>function(null $fd, int $events(1:EV_TIMEOUT), array $arg(CLibEvent $event, mixed $arg)){}</tt>
+	 * <br><tt>function(null $fd, int $events(1:EV_TIMEOUT), array $arg(Event $event, mixed $arg)){}</tt>
 	 * </p>
 	 * @param mixed $arg
 	 *
-	 * @return CLibEvent
+	 * @return self
 	 */
 	public function setTimer($callback, $arg = null)
 	{
 		$this->checkResourse();
 		if (!event_timer_set($this->resource, $callback, array($this, $arg))) {
-			throw new AzaException("Can't prepare event (event_timer_set) for timer", 1);
+			throw new Exception("Can't prepare event (event_timer_set) for timer");
 		}
 		return $this;
 	}

@@ -1,144 +1,20 @@
 <?php
 
+namespace Aza\Components\Cli;
+use Aza\Components\LibEvent\EventBase;
+use Exception;
+
 /**
- * Console functionality
+ * Basic functionality for CLI and Daemon applications (cut version)
  *
  * @project Anizoptera CMF
  * @package system.cli
+ * @version $Id: Base.php 3235 2012-04-06 10:32:20Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-abstract class CShell
+abstract class Base
 {
-	// Exit codes
-	// @link http://www.freebsd.org/cgi/man.cgi?query=sysexits&sektion=3
-	// @link http://www.hiteksoftware.com/knowledge/articles/049.htm
-
-	/**
-	 * The successful exit
-	 */
-	const EX_OK = 0;
-
-	/**
-	 * Error occured
-	 */
-	const EX_ERROR = 1;
-
-	/**
-	 * Action locked
-	 */
-	const EX_LOCKED = 2;
-
-	/**
-	 * The command was used incorrectly, e.g., with the
-	 * wrong number of arguments, a bad flag, a bad syntax
-	 * in a parameter, or whatever.
-	 */
-	const EX_USAGE = 64;
-
-	/**
-	 * The input data was incorrect in some way.
-	 * This should only be used for user's data and not system
-	 * files.
-	 */
-	const EX_DATAERR = 65;
-
-	/**
-	 * An input file (not a system file) did not exist or
-	 * was not readable. This could also include errors
-	 * like ``No message'' to a mailer (if it cared to
-	 * catch it).
-	 */
-	const EX_NOINPUT = 66;
-
-	/**
-	 * The user specified did not exist. 
-	 * This might be used for mail addresses or remote logins.
-	 */
-	const EX_NOUSER = 67;
-
-	/**
-	 * The host specified did not exist. This is used in
-	 * mail addresses or network requests.
-	 */
-	const EX_NOHOST = 68;
-
-	/**
-	 * A service is unavailable.  This can occur if a sup-
-	 * port program or file does not exist.  This can also
-	 * be used as a catchall message when something you
-	 * wanted to do does not work, but you do not know
-	 * why.
-	 */
-	const EX_UNAVAILABLE = 69;
-
-	/**
-	 * An internal software error has been detected.  This
-	 * should be limited to non-operating system related
-	 * errors as possible.
-	 */
-	const EX_SOFTWARE = 70;
-
-	/**
-	 * An operating system error has been detected.  This
-	 * is intended to be used for such things as ``cannot
-	 * fork'', ``cannot create pipe'', or the like.  It
-	 * includes things like getuid returning a user that
-	 * does not exist in the passwd file.
-	 */
-	const EX_OSERR = 71;
-
-	/**
-	 * Some system file (e.g., /etc/passwd, /var/run/utmp,
-	 * etc.) does not exist, cannot be opened, or has some
-	 * sort of error (e.g., syntax error).
-	 */
-	const EX_OSFILE = 72;
-
-	/**
-	 * A (user specified) output file cannot be created.
-	 */
-	const EX_CANTCREAT = 73;
-
-	/**
-	 * An error occurred while doing I/O on some file.
-	 */
-	const EX_IOERR = 74;
-
-	/**
-	 * Temporary failure, indicating something that is not
-	 * really an error.  In sendmail, this means that a
-	 * mailer (e.g.) could not create a connection, and
-	 * the request should be reattempted later.
-	 */
-	const EX_TEMPFAIL = 75;
-
-	/**
-	 * The remote system returned something that was 'not
-	 * possible' during a protocol exchange.
-	 */
-	const EX_PROTOCOL = 76;
-
-	/**
-	 * You did not have sufficient permission to perform
-	 * the operation.  This is not intended for file sys-
-	 * tem problems, which should use EX_NOINPUT or
-	 * EX_CANTCREAT, but rather for higher level permis-
-	 * sions.
-	 */
-	const EX_NOPERM = 77;
-
-	/**
-	 * Something was found in an unconfigured or miscon-
-	 * figured state.
-	 */
-	const EX_CONFIG = 78;
-
-	/**
-	 * Process terminated (interrupted)
-	 */
-	const EX_TERM = 143;
-
-
-
 	/**
 	 * Whether forks supported
 	 *
@@ -152,13 +28,6 @@ abstract class CShell
 	 * @var bool
 	 */
 	public static $hasLibevent;
-
-	/**
-	 * Global libevent base
-	 *
-	 * @var CLibEventBase|null
-	 */
-	public static $eventBase;
 
 	/**
 	 * Whether current process is master
@@ -422,6 +291,32 @@ abstract class CShell
 		SIGUSR2   => 'SIGUSR2',
 	);
 
+	/**
+	 * Global libevent base
+	 *
+	 * @var EventBase|null
+	 */
+	private static $eventBase;
+
+
+	/**
+	 * Returns global shared libevent base
+	 *
+	 * @return EventBase
+	 */
+	public static function getEventBase()
+	{
+		return self::$eventBase ?: self::$eventBase = new EventBase();
+	}
+
+	/**
+	 * Cleans global shared libevent base
+	 */
+	public static function cleanEventBase()
+	{
+		self::$eventBase && self::$eventBase->free();
+		self::$eventBase = null;
+	}
 
 
 	/**
@@ -439,82 +334,9 @@ abstract class CShell
 
 
 	/**
-	 * Initializes signal handler
-	 *
-	 * @throws AzaException
-	 *
-	 * @see pcntl_signal
-	 *
-	 * @param callback $handler
-	 * @param int $signo
-	 * @param bool $ignore
-	 * @param bool $default
-	 */
-	public static function signalHandle($handler, $signo = null, $ignore = false, $default = false)
-	{
-		$handler = $ignore ? SIG_IGN : ($default ? SIG_DFL : $handler);
-
-		if ($signo !== null) {
-			if (isset(self::$signals[$signo]) && SIGKILL !== $signo && SIGSTOP !== $signo) {
-				if (!pcntl_signal($signo, $handler)) {
-					$name = self::$signals[$signo];
-					throw new AzaException("Can't initialize signal handler for $name ($signo)");
-				}
-			}
-		} else {
-			foreach (self::$signals as $signo => $name) {
-				if ($signo === SIGKILL || $signo === SIGSTOP) {
-					continue;
-				}
-				if (!pcntl_signal($signo, $handler)) {
-					throw new AzaException("Can't initialize signal handler for $name ($signo)");
-				}
-			}
-		}
-	}
-
-
-	/**
-	 * Waits for the signal, with a timeout
-	 *
-	 * @see pcntl_sigtimedwait
-	 * @see pcntl_sigprocmask
-	 *
-	 * @param int $signo <p>
-	 * Signal's number
-	 * </p>
-	 * @param int $seconds [optional] <p>
-	 * Timeout in seconds.
-	 * </p>
-	 * @param int $nanoseconds [optional] <p>
-	 * Timeout in nanoseconds.
-	 * </p>
-	 * @param array $siginfo [optional] <p>
-	 * The siginfo is set to an array containing
-	 * informations about the signal. See
-	 * {@link pcntl_sigwaitinfo}.
-	 * </p>
-	 *
-	 * @return bool
-	 */
-	public static function signalWait($signo, $seconds = 1, $nanoseconds = null, &$siginfo = null)
-	{
-		if (isset(self::$signals[$signo])) {
-			pcntl_sigprocmask(SIG_BLOCK, array($signo));
-			$res = pcntl_sigtimedwait(array($signo), $siginfo, $seconds, $nanoseconds);
-			pcntl_sigprocmask(SIG_UNBLOCK, array($signo));
-			if ($res > 0) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-
-	/**
 	 * Forks the currently running process
 	 *
-	 * @throws AzaException if could not fork
+	 * @throws Exception if could not fork
 	 *
 	 * @return int the PID of the child process is returned
 	 * in the parent's thread of execution, and a 0 is
@@ -530,18 +352,23 @@ abstract class CShell
 		 * Error 12: Cannot allocate memory
 		 */
 		$pid = pcntl_fork();
-		if ($pid === -1) {
-			throw new AzaException('Could not fork');
-		} else if ($pid === 0) {
+		if (-1 === $pid) {
+			throw new Exception('Could not fork');
+		}
+		// Child
+		else if (0 === $pid) {
 			self::$isMaster = false;
+
+			// Reinitialize main event base in child process
+			self::$eventBase && self::$eventBase->reinitialize();
 		}
 		return $pid;
 	}
 
 	/**
-	 * Detach process from the controlling terminal
+	 * Detaches process from the controlling terminal
 	 *
-	 * @throws AzaException if could not detach
+	 * @throws Exception if could not detach
 	 */
 	public static function detach()
 	{
@@ -553,84 +380,8 @@ abstract class CShell
 		// Make the current process a session leader
 		self::$isMaster = true;
 		if (posix_setsid() === -1) {
-			throw new AzaException('Could not detach from terminal');
+			throw new Exception('Could not detach from terminal');
 		}
-	}
-
-
-	/**
-	 * Returns current tty width in columns
-	 *
-	 * @param resource $stream
-	 *
-	 * @return int
-	 */
-	public static function getTtyColumns($stream = null)
-	{
-		if (IS_WIN || !self::getIsTty($stream ?: STDOUT)) {
-			return 95;
-		}
-		$cols = (int)shell_exec('stty -a|grep -oPm 1 "(?<=columns )(\d+)(?=;)"');
-		return max(40, $cols);
-	}
-
-	/**
-	 * Determine if a file descriptor is an interactive terminal
-	 *
-	 * @param resource|int $stream File descriptor resource
-	 *
-	 * @return bool
-	 */
-	public static function getIsTty($stream)
-	{
-		return function_exists('posix_isatty') && @posix_isatty($stream);
-	}
-
-
-	/**
-	 * Returns command by PID
-	 *
-	 * @param int $pid
-	 *
-	 * @return string
-	 */
-	public static function getCommandByPid($pid)
-	{
-		if ($pid < 1 || IS_WIN) {
-			return '';
-		}
-		exec("ps -p {$pid} -o%c", $data);
-		return $data && count($data) === 2 ? array_pop($data) : '';
-	}
-
-
-	/**
-	 * Kills process with it's childs recursively
-	 *
-	 * @throws AzaException
-	 *
-	 * @param int $pid
-	 * @param int $signal Kill signal (SIGTERM, SIGKILL ...)
-	 */
-	public static function killProcessTree($pid, $signal = SIGTERM)
-	{
-		if ($pid < 1 || IS_WIN) {
-			return;
-		}
-
-		// Kill childs
-		exec("ps -ef| awk '\$3 == '$pid' { print  \$2 }'", $output, $ret);
-		if ($ret) {
-			throw new AzaException('You need ps, grep, and awk', 1);
-		}
-		foreach ($output as $t) {
-			if ($t != $pid) {
-				self::killProcessTree($t, $signal);
-			}
-		}
-
-		// Kill self
-		posix_kill($pid, $signal);
 	}
 
 
@@ -666,15 +417,15 @@ abstract class CShell
 	 *
 	 * @return string
 	 */
-	public static function getLogTime()
+	public static function getTime()
 	{
 		$mt = explode(' ', microtime());
 		return '[' . date('Y.m.d H:i:s', $mt[1]) . '.' . sprintf('%06d', $mt[0] * 1000000) . ' ' . date('O') . ']';
 	}
 }
 
-// Need CLI environment, posix and pcntl extensions
-CShell::$hasForkSupport = IS_CLI && function_exists('pcntl_fork') && function_exists('posix_getpid');
+// CLI environment, posix and pcntl extensions
+Base::$hasForkSupport = IS_CLI && function_exists('pcntl_fork') && function_exists('posix_getpid');
 
-// Need libevent extension
-CShell::$hasLibevent = function_exists('event_base_new');
+// libevent extension
+Base::$hasLibevent = function_exists('event_base_new');

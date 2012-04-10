@@ -1,20 +1,26 @@
 <?php
 
+use Aza\Components\Cli\Thread\Thread;
+use Aza\Components\Cli\Thread\ThreadPool;
+use Aza\Components\Cli\Base;
+
+require __DIR__ . '/inc.thread.php';
+
+
 /**
  * Examples of using the library CThread
  *
- * @project Anizoptera CMF
- * @package system.thread
+ * @package system.AzaSocket
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-
-require __DIR__ . '/inc.thread.php';
 
 
 
 /**
  * Test thread
  */
-class TestThreadReturnFirstArgument extends CThread
+class TestThreadReturnFirstArgument extends Thread
 {
 	/**
 	 * Main processing.
@@ -30,10 +36,9 @@ class TestThreadReturnFirstArgument extends CThread
 /**
  * Test thread
  */
-class TestThreadEvents extends CThread
+class TestThreadEvents extends Thread
 {
 	const EV_PROCESS = 'process';
-
 
 	/**
 	 * Main processing.
@@ -51,12 +56,12 @@ class TestThreadEvents extends CThread
 
 
 // Checks
-if (!CThread::$useForks) {
+if (!Thread::$useForks) {
 	echo PHP_EOL . "You do not have the minimum system requirements to work in async mode!!!";
-	if (!CShell::$hasForkSupport) {
+	if (!Base::$hasForkSupport) {
 		echo PHP_EOL . "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
 	}
-	if (!CShell::$hasLibevent) {
+	if (!Base::$hasLibevent) {
 		echo PHP_EOL . "You don't have libevent extension installed!";
 	}
 	echo PHP_EOL;
@@ -68,6 +73,11 @@ echo PHP_EOL . 'Simple example with one thread' . PHP_EOL;
 
 $num = 10; // Number of tasks
 $thread = new TestThreadReturnFirstArgument();
+
+// You can override preforkWait property
+// to TRUE to not wait thread at first time manually
+$thread->wait();
+
 for ($i = 0; $i < $num; $i++) {
 	$value = $i;
 	// Run task and wait for the result
@@ -94,6 +104,10 @@ $num    = 3;	// Number of tasks
 
 $thread = new TestThreadEvents();
 
+// You can override preforkWait property
+// to TRUE to not wait thread at first time manually
+$thread->wait();
+
 $cb = function($event_name, $event_data)  {
 	echo "event: $event_name : $event_data" . PHP_EOL;
 };
@@ -112,7 +126,7 @@ $threads = 4;
 
 echo PHP_EOL . "Simple example with pool of threads ($threads)" . PHP_EOL;
 
-$pool = new CThreadPool('TestThreadReturnFirstArgument', $threads);
+$pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
 $num  = 25;		// Number of tasks
 $left = $num;	// Number of remaining tasks
@@ -150,7 +164,7 @@ $jobs_num = count($jobs);
 
 echo PHP_EOL . "Example with pool of threads ($threads) and pool of jobs ($jobs_num)" . PHP_EOL;
 
-$pool = new CThreadPool('TestThreadReturnFirstArgument', $threads);
+$pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
 $num     = $jobs_num; // Number of tasks
 $left    = $jobs_num; // Number of remaining tasks

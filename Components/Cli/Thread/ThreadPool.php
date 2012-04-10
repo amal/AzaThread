@@ -1,12 +1,19 @@
 <?php
 
+namespace Aza\Components\Cli\Thread;
+use Aza\Components\Cli\Base;
+use Aza\Components\Cli\Thread\Exceptions\Exception;
+
 /**
- * Thread pool.
+ * Thread pool for AzaThread (old name - CThread).
  *
  * @project Anizoptera CMF
- * @package system.thread
+ * @package system.AzaThread
+ * @version $Id: ThreadPool.php 3253 2012-04-10 09:35:33Z samally $
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
-class CThreadPool
+class ThreadPool
 {
 	/**
 	 * All started pools count
@@ -26,13 +33,6 @@ class CThreadPool
 	 * @var int
 	 */
 	protected $id;
-
-	/**
-	 * Current process pid
-	 *
-	 * @var int
-	 */
-	protected $pid;
 
 	/**
 	 * Current pool name
@@ -62,7 +62,7 @@ class CThreadPool
 	/**
 	 * Threads in pool (id => thread)
 	 *
-	 * @var CThread[]
+	 * @var Thread[]
 	 */
 	public $threads = array();
 
@@ -126,20 +126,12 @@ class CThreadPool
 		$debug && $this->debug = true;
 
 		$this->id       = ++self::$allPoolsCount;
-		$this->pid      = posix_getpid();
 		$this->poolName = $name;
 		$this->tName    = $threadName;
 
-		if (!CThread::$useForks) {
-			$this->maxThreads = 1;
-		}
-		if (null !== $maxThreads) {
-			$this->setMaxThreads($maxThreads);
-		}
-
-		if (null !== $pName) {
-			$this->pName = $pName;
-		}
+		!Thread::$useForks && $this->maxThreads = 1;
+		isset($maxThreads) && $this->setMaxThreads($maxThreads);
+		isset($pName)      && $this->pName = $pName;
 
 		$this->debug("Pool of '$threadName' threads created.");
 
@@ -175,7 +167,7 @@ class CThreadPool
 	{
 		if (($count = &$this->threadsCount) < ($tMax = $this->maxThreads)) {
 			do {
-				/** @var $thread CThread */
+				/** @var $thread Thread */
 				$thread = $this->tName;
 				$thread = new $thread($this->debug, $this->pName, $this);
 				$id = $thread->getId();
@@ -235,9 +227,9 @@ class CThreadPool
 				$w += $this->initializing;
 			}
 			$this->debug && $this->debug('Waiting for threads: ' . join(', ', $w));
-			CThread::waitThreads($w);
+			Thread::waitThreads($w);
 		} else {
-			throw new AzaException('Nothing to wait in pool');
+			throw new Exception('Nothing to wait in pool');
 		}
 		return $this->getResults($failed);
 	}
@@ -334,7 +326,7 @@ class CThreadPool
 			/** @var $cb callback */
 			foreach ($this->listeners[$event] as $l) {
 				list($cb, $arg) = $l;
-				if ($cb instanceof Closure) {
+				if ($cb instanceof \Closure) {
 					$cb($event, $threadId, $data, $arg);
 				} else {
 					call_user_func($cb, $event, $threadId, $data, $arg);
@@ -353,7 +345,7 @@ class CThreadPool
 	{
 		if ($value < $this->threadsCount) {
 			$value = $this->threadsCount;
-		} else if (!CThread::$useForks || $value < 1) {
+		} else if (!Thread::$useForks || $value < 1) {
 			$value = 1;
 		}
 		$this->maxThreads = (int)$value;
@@ -371,8 +363,11 @@ class CThreadPool
 			return;
 		}
 
-		$time = CShell::getLogTime();
-		$message = "{$time} [debug] [P{$this->id}.{$this->poolName}] #{$this->pid}: {$message}";
+		$time     = Base::getTime();
+		$poolId   = $this->id;
+		$poolName = $this->poolName;
+		$pid      = posix_getpid();
+		$message  = "{$time} [debug] [P{$poolId}.{$poolName}] #{$pid}: {$message}";
 
 		echo $message;
 		@ob_flush(); @flush();

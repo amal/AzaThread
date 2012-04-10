@@ -1,9 +1,9 @@
-CThread
+AzaThread (old name - CThread)
 ====
 
-https://github.com/amal/CThread
+https://github.com/amal/AzaThread
 
-CThread is a simple and powerful threads emulation component for PHP.
+AzaThread is a simple and powerful threads emulation component for PHP.
 
 Main features and possibilites:
 
@@ -12,14 +12,16 @@ Main features and possibilites:
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
 * Uses [libevent](http://php.net/libevent) with socket pairs for inter-process communication;
-* Supports five variants of data transfering (for processing arguments, results and event data) between processes and automatically selects the best of them: igbinary serialized data through sockets, php serialized data through sockets, System V Memory queue (sysvmsg), System V shared memory (sysvshm), Shared memory (shmop).
+* Supports two variants of data serialization for transfer (igbinary, native php serialization);
 * Transfer of events between the "thread" and the parent process;
 * Working with a thread pool with preservation of multiple use, passing arguments and receiving results;
 * Errors handling;
 * Timeouts for work, child process waiting, initialization;
 * Maximum performance;
 
-CThread is written for Anizoptera CMF by Amal Samally (amal.samally at gmail.com)
+AzaThread is a part of Anizoptera CMF, written by [Amal Samally](http://azagroup.ru/contacts#amal) (amal.samally at gmail.com)
+
+Licensed under the MIT License.
 
 
 Requirements
@@ -37,7 +39,7 @@ Examples
 Simply run processing asynchronously
 
 ```php
-class ExampleThread extends CThread
+class ExampleThread extends Thread
 {
 	protected function process()
 	{
@@ -46,13 +48,13 @@ class ExampleThread extends CThread
 }
 
 $thread = new ExampleThread();
-$thread->run();
+$thread->wait()->run();
 ```
 
 Send argument and receive result of processing
 
 ```php
-class ExampleThread extends CThread
+class ExampleThread extends Thread
 {
 	protected function process()
 	{
@@ -61,13 +63,13 @@ class ExampleThread extends CThread
 }
 
 $thread = new ExampleThread();
-$result = $thread->run(123)->wait()->getResult();
+$result = $thread->wait()->run(123)->wait()->getResult();
 ```
 
 Triggering events from thread
 
 ```php
-class ExampleThread extends CThread
+class ExampleThread extends Thread
 {
 	const EV_PROCESS = 'process';
 
@@ -90,6 +92,10 @@ $thread->bind(ExampleThread::EV_PROCESS, function($event_name, $event_data, $add
 
 $events = 10; // number of events to trigger
 
+// You can override preforkWait property
+// to TRUE to not wait thread at first time manually
+$thread->wait();
+
 $thread = new ExampleThread();
 $thread->run($events)->wait();
 ```
@@ -98,7 +104,7 @@ Use pool with 8 threads
 
 ```php
 $threads = 8  // Number of threads
-$pool = new CThreadPool('ExampleThread', $threads);
+$pool = new ThreadPool('ExampleThread', $threads);
 
 $num = 25;    // Number of tasks
 $left = $num; // Remaining number of tasks
@@ -134,12 +140,14 @@ do {
 $pool->cleanup();
 ```
 
-Other examples can be seen in the example file ([example.php](https://github.com/amal/CThread/blob/master/example.php)) and unit test ([tests/Test_Thread.php](https://github.com/amal/CThread/blob/master/tests/Test_Thread.php)).
+Other examples can be seen in the example file ([example.php](https://github.com/amal/AzaThread/blob/master/example.php)) and unit test ([tests/ThreadTest.php](https://github.com/amal/AzaThread/blob/master/tests/ThreadTest.php)).
 
-You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/CThread/blob/master/test.php).
+You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/AzaThread/blob/master/test.php).
 
 
 Links
 -----
 
-[CThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
+[AzaThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
+
+AzaThread uses some components from Anizopera CMF: AzaAutoloader, AzaSocket, [AzaLibEvent](https://github.com/amal/AzaLibEvent)
