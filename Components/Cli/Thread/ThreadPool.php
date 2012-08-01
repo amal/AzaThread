@@ -275,7 +275,7 @@ class ThreadPool
 	 *
 	 * @return array
 	 */
-	protected function getState()
+	public function getState()
 	{
 		$state = array();
 		foreach ($this->threads as $threadId => $thread) {
