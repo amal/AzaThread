@@ -1,11 +1,11 @@
 AzaThread (old name - CThread)
 ====
 
-https://github.com/amal/AzaThread
-
 AzaThread is a simple and powerful threads emulation component for PHP.
 
-Main features and possibilites:
+https://github.com/amal/AzaThread
+
+Features:
 
 * Uses [forks](http://php.net/pcntl-fork) to operate asynchronously;
 * Synchronous compatibility mode if there are no required extensions;
@@ -19,7 +19,7 @@ Main features and possibilites:
 * Timeouts for work, child process waiting, initialization;
 * Maximum performance;
 
-AzaThread is a part of Anizoptera CMF, written by [Amal Samally](http://azagroup.ru/contacts#amal) (amal.samally at gmail.com)
+AzaThread is a part of Anizoptera CMF, written by [Amal Samally](http://azagroup.ru#amal) (amal.samally at gmail.com)
 
 Licensed under the MIT License.
 
@@ -27,7 +27,7 @@ Licensed under the MIT License.
 Requirements
 ------------
 
-* PHP 5.3.0 (or later);
+* PHP 5.3.3 (or later);
 * [libevent](http://php.net/libevent);
 * [pcntl](http://php.net/pcntl);
 * [posix](http://php.net/posix);
@@ -140,7 +140,7 @@ do {
 $pool->cleanup();
 ```
 
-Other examples can be seen in the example file ([example.php](https://github.com/amal/AzaThread/blob/master/example.php)) and unit test ([tests/ThreadTest.php](https://github.com/amal/AzaThread/blob/master/tests/ThreadTest.php)).
+Other examples can be seen in the example file ([example.php](example.php)) and unit test ([tests/ThreadTest.php](tests/ThreadTest.php)).
 
 You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/AzaThread/blob/master/test.php).
 
