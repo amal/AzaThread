@@ -1,0 +1,23 @@
+{
+    "name": "amal/aza-thread",
+    "homepage": "https://github.com/amal/AzaThread",
+    "type": "library",
+    "license": "MIT",
+    "description": "AzaThread is a simple and powerful threads emulation component for PHP.",
+    "require": {
+        "php": ">=5.3.3",
+        "ext-posix": "*",
+        "ext-libevent": "*",
+        "ext-pcntl": "*"
+    },
+    "authors": [
+        {
+            "name":  "Amal Samally",
+            "email": "amal.samally@gmail.com"
+        }
+    ],
+    "target-dir": "Aza",
+    "autoload": {
+        "psr-0": { "Aza\\Components": "" }
+    }
+}
