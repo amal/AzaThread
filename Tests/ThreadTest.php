@@ -1,22 +1,18 @@
 <?php
 
-namespace Aza\Tests\Components\Cli\Thread;
-use PHPUnit_Framework_TestCase as TestCase;
-use Aza\Components\Cli\Thread\Thread;
-use Aza\Components\Cli\Thread\ThreadPool;
+namespace Aza\Components\Thread\Tests;
+use Aza\Components\Log\Logger;
 use Aza\Components\Socket\Socket;
+use Aza\Components\Thread\Thread;
+use Aza\Components\Thread\ThreadPool;
 use Exception;
-
-
-require_once __DIR__ . '/../inc.thread.php';
-
+use PHPUnit_Framework_TestCase as TestCase;
 
 /**
  * Testing thread system
  *
  * @project Anizoptera CMF
  * @package system.thread
- * @version $Id: ThreadTest.php 3253 2012-04-10 09:35:33Z samally $
  */
 class ThreadTest extends TestCase
 {
@@ -27,7 +23,7 @@ class ThreadTest extends TestCase
 
 
 	/**
-	 * This method is called before the first test of this test class is run.
+	 * {@inheritdoc}
 	 */
 	public static function setUpBeforeClass()
 	{
@@ -35,7 +31,7 @@ class ThreadTest extends TestCase
 	}
 
 	/**
-	 * This method is called after the last test of this test class is run.
+	 * {@inheritdoc}
 	 */
 	public static function tearDownAfterClass()
 	{
@@ -93,8 +89,8 @@ class ThreadTest extends TestCase
 	public function testAsync()
 	{
 		if (!Thread::$useForks) {
-			$this->markTestIncomplete(
-				'You need Forks, LibEvent, PCNTL and POSIX support'
+			$this->markTestSkipped(
+				'You need LibEvent, PCNTL and POSIX support'
 				.' with CLI sapi to fully test Threads'
 			);
 			return;
@@ -104,7 +100,7 @@ class ThreadTest extends TestCase
 			Thread::IPC_IGBINARY  => 'igbinary_serialize',
 			Thread::IPC_SERIALIZE => false,
 		);
-		$sockModes = array(true, false);
+		$sockModes     = array(true, false);
 		$defDataMode   = Thread::$ipcDataMode;
 		$defSocketMode = Socket::$useSockets;
 
@@ -180,9 +176,9 @@ class ThreadTest extends TestCase
 		$num = 10;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-				 'Thread test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-				 '-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Thread test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		/** @var $thread Thread */
@@ -218,9 +214,9 @@ class ThreadTest extends TestCase
 		$num = 10;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-			'Thread errorable test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-			'-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Thread errorable test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		$thread = new TestThreadReturnArgErrors($debug);
@@ -260,9 +256,9 @@ class ThreadTest extends TestCase
 		$num = 3;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-				 'Thread events test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-				 '-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Thread events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		$thread = new TestThreadEvents($debug);
@@ -303,6 +299,8 @@ class ThreadTest extends TestCase
 	 * @param bool $debug
 	 * @param bool $bigResult
 	 * @param bool $withChild
+	 *
+	 * @throws Exception
 	 */
 	function processPool($debug, $bigResult = false, $withChild = false)
 	{
@@ -310,9 +308,9 @@ class ThreadTest extends TestCase
 		$threads = 4;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-				 'Thread pool test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-				 '-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		$thread = $withChild
@@ -375,6 +373,8 @@ class ThreadTest extends TestCase
 	 *
 	 * @param bool $debug
 	 * @param bool $async
+	 *
+	 * @throws Exception
 	 */
 	function processPoolEvent($debug, $async = false)
 	{
@@ -383,9 +383,9 @@ class ThreadTest extends TestCase
 		$threads = 3;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-			'Thread pool events test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-			'-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Thread pool events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		$pool = new ThreadPool(
@@ -460,6 +460,8 @@ class ThreadTest extends TestCase
 	 * Pool, errors
 	 *
 	 * @param bool $debug
+	 *
+	 * @throws Exception
 	 */
 	function processPoolErrorable($debug)
 	{
@@ -467,9 +469,9 @@ class ThreadTest extends TestCase
 		$threads = 2;
 
 		if ($debug) {
-			echo '-----------------------' , PHP_EOL,
-			'Errorable thread pool test: ' , (Thread::$useForks ? 'Async' : 'Sync') , PHP_EOL,
-			'-----------------------', PHP_EOL;
+			echo '-----------------------', PHP_EOL,
+			     "Errorable thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			     '-----------------------', PHP_EOL;
 		}
 
 		$pool = new ThreadPool(
@@ -573,7 +575,7 @@ class TestThreadReturnArgErrors extends Thread
 /**
  * Test thread
  */
-class TestThreadWithChilds extends Thread
+class TestThreadNothing extends Thread
 {
 	/**
 	 * Main processing.
@@ -582,7 +584,24 @@ class TestThreadWithChilds extends Thread
 	 */
 	protected function process()
 	{
-		`echo 1`;
+	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadWithChilds extends Thread
+{
+
+
+	/**
+	 * Main processing.
+	 *
+	 * @return mixed
+	 */
+	protected function process()
+	{
+		$res = `echo 1`;
 		return $this->getParam(0);
 	}
 }
@@ -600,6 +619,27 @@ class TestThreadReturn extends Thread
 	protected function process()
 	{
 		return array(123456789, 'abcdefghigklmnopqrstuvwxyz', 123.7456328);
+	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadWork extends Thread
+{
+	/**
+	 * Main processing.
+	 *
+	 * @return mixed
+	 */
+	protected function process()
+	{
+		$r = null;
+		$i = 1000;
+		while ($i--) {
+			$r = mt_rand(0, PHP_INT_MAX) * mt_rand(0, PHP_INT_MAX);
+		}
+		return $r;
 	}
 }
 

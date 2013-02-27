@@ -1,16 +1,18 @@
 <?php
 
-use Aza\Components\Cli\Thread\Thread;
-use Aza\Components\Cli\Thread\ThreadPool;
-use Aza\Components\Cli\Base;
+use Aza\Components\CliBase\Base;
+use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Components\Thread\Thread;
+use Aza\Components\Thread\ThreadPool;
 
-require __DIR__ . '/inc.thread.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 
 /**
- * Examples of using the library CThread
+ * AzaThread examples
  *
- * @package system.AzaSocket
+ * @project Anizoptera CMF
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
@@ -57,19 +59,21 @@ class TestThreadEvents extends Thread
 
 // Checks
 if (!Thread::$useForks) {
-	echo PHP_EOL . "You do not have the minimum system requirements to work in async mode!!!";
+	echo PHP_EOL, "You do not have the minimum system requirements to work in async mode!!!";
 	if (!Base::$hasForkSupport) {
-		echo PHP_EOL . "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
+		echo PHP_EOL, "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
 	}
 	if (!Base::$hasLibevent) {
-		echo PHP_EOL . "You don't have libevent extension installed!";
+		echo PHP_EOL, "You don't have libevent extension installed!";
 	}
 	echo PHP_EOL;
 }
 
 
 // ----------------------------------------------
-echo PHP_EOL . 'Simple example with one thread' . PHP_EOL;
+echo PHP_EOL,
+     'Simple example with one thread',
+     PHP_EOL;
 
 $num = 10; // Number of tasks
 $thread = new TestThreadReturnFirstArgument();
@@ -97,10 +101,12 @@ $thread->cleanup();
 
 
 // ----------------------------------------------
-echo PHP_EOL . 'Simple example with thread events' . PHP_EOL;
+echo PHP_EOL,
+     'Simple example with thread events',
+     PHP_EOL;
 
-$events = 10;	// Number of events
-$num    = 3;	// Number of tasks
+$events = 10; // Number of events
+$num    = 3;  // Number of tasks
 
 $thread = new TestThreadEvents();
 
@@ -109,13 +115,13 @@ $thread = new TestThreadEvents();
 $thread->wait();
 
 $cb = function($event_name, $event_data)  {
-	echo "event: $event_name : $event_data" . PHP_EOL;
+	echo "event: $event_name : ", $event_data, PHP_EOL;
 };
 $thread->bind(TestThreadEvents::EV_PROCESS, $cb);
 
 for ($i = 0; $i < $num; $i++) {
 	$thread->run($events)->wait();
-	echo 'task ended' . PHP_EOL;
+	echo 'task ended', PHP_EOL;
 }
 $thread->cleanup();
 
@@ -124,12 +130,14 @@ $thread->cleanup();
 // ----------------------------------------------
 $threads = 4;
 
-echo PHP_EOL . "Simple example with pool of threads ($threads)" . PHP_EOL;
+echo PHP_EOL,
+     "Simple example with pool of threads ($threads)",
+     PHP_EOL;
 
 $pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
-$num  = 25;		// Number of tasks
-$left = $num;	// Number of remaining tasks
+$num  = 25;   // Number of tasks
+$left = $num; // Number of remaining tasks
 do {
 	while ($left > 0 && $pool->hasWaiting()) {
 		if (!$threadId = $pool->run($left)) {
@@ -140,7 +148,7 @@ do {
 	if ($results = $pool->wait($failed)) {
 		foreach ($results as $threadId => $result) {
 			$num--;
-			echo 'result: ' . $result . PHP_EOL;
+			echo "result: $result (thread $threadId)", PHP_EOL;
 		}
 	}
 	if ($failed) {
@@ -148,7 +156,7 @@ do {
 		// processing is not successful if thread dies
 		// when worked or working timeout exceeded
 		foreach ($failed as $threadId) {
-			echo 'error' . PHP_EOL;
+			echo "error (thread $threadId)", PHP_EOL;
 			$left++;
 		}
 	}
@@ -162,7 +170,9 @@ $threads  = 8;
 $jobs     = range(1, 30);
 $jobs_num = count($jobs);
 
-echo PHP_EOL . "Example with pool of threads ($threads) and pool of jobs ($jobs_num)" . PHP_EOL;
+echo PHP_EOL,
+     "Example with pool of threads ($threads) and pool of jobs ($jobs_num)",
+     PHP_EOL;
 
 $pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
@@ -182,7 +192,7 @@ do {
 		foreach ($results as $threadId => $result) {
 			unset($started[$threadId]);
 			$num--;
-			echo 'result: ' . $result . PHP_EOL;
+			echo "result: $result (thread $threadId)", PHP_EOL;
 		}
 	}
 	if ($failed) {
@@ -191,7 +201,7 @@ do {
 		// when worked or working timeout exceeded
 		foreach ($failed as $threadId) {
 			$jobs[] = $started[$threadId];
-			echo 'error: ' . $started[$threadId] . PHP_EOL;
+			echo "error: {$started[$threadId]} (thread $threadId)", PHP_EOL;
 			unset($started[$threadId]);
 			$left++;
 		}

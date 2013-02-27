@@ -1,17 +1,19 @@
 AzaThread (old name - CThread)
-====
+==============================
 
-AzaThread is a simple and powerful threads emulation component for PHP.
+Anizoptera CMF simple and powerful threads emulation component for PHP (based on forks).
 
-https://github.com/amal/AzaThread
+https://github.com/Anizoptera/AzaThread
+
+[![Build Status](https://secure.travis-ci.org/Anizoptera/AzaThread.png?branch=master)](http://travis-ci.org/Anizoptera/AzaThread)
 
 Features:
 
 * Uses [forks](http://php.net/pcntl-fork) to operate asynchronously;
-* Synchronous compatibility mode if there are no required extensions;
+* Supports synchronous compatibility mode if there are no required extensions;
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
-* Uses [libevent](http://php.net/libevent) with socket pairs for inter-process communication;
+* Uses [libevent](http://php.net/libevent) with socket pairs for efficient inter-process communication;
 * Supports two variants of data serialization for transfer (igbinary, native php serialization);
 * Transfer of events between the "thread" and the parent process;
 * Working with a thread pool with preservation of multiple use, passing arguments and receiving results;
@@ -19,7 +21,7 @@ Features:
 * Timeouts for work, child process waiting, initialization;
 * Maximum performance;
 
-AzaThread is a part of Anizoptera CMF, written by [Amal Samally](http://azagroup.ru#amal) (amal.samally at gmail.com)
+AzaThread is a part of [Anizoptera CMF](https://github.com/Anizoptera), written by [Amal Samally](http://azagroup.ru/#amal) (amal.samally at gmail.com) and [AzaGroup](http://azagroup.ru/) team.
 
 Licensed under the MIT License.
 
@@ -28,15 +30,36 @@ Requirements
 ------------
 
 * PHP 5.3.3 (or later);
+* Unix system;
 * [libevent](http://php.net/libevent);
 * [pcntl](http://php.net/pcntl);
 * [posix](http://php.net/posix);
+* [AzaLibevent](https://github.com/Anizoptera/AzaLibEvent) - will be installed automatically with composer;
+* [AzaSocket](https://github.com/Anizoptera/AzaSocket) - will be installed automatically with composer;
+* [AzaCliBase](https://github.com/Anizoptera/AzaCliBase) - will be installed automatically with composer;
+
+NOTE: You can use synchronous compatibility mode even without requirements (or on windows, for example).
+
+
+Installation
+------------
+
+The recommended way to install AzaThread is [through composer](http://getcomposer.org).
+You can see [package information on Packagist.](https://packagist.org/packages/aza/thread)
+
+```JSON
+{
+	"require": {
+		"aza/thread": "~1.0"
+	}
+}
+```
 
 
 Examples
 --------
 
-Simply run processing asynchronously
+#### Example #1 - Simply run processing asynchronously
 
 ```php
 class ExampleThread extends Thread
@@ -51,7 +74,7 @@ $thread = new ExampleThread();
 $thread->wait()->run();
 ```
 
-Send argument and receive result of processing
+#### Example #2 - Send argument and receive result of processing
 
 ```php
 class ExampleThread extends Thread
@@ -66,7 +89,7 @@ $thread = new ExampleThread();
 $result = $thread->wait()->run(123)->wait()->getResult();
 ```
 
-Triggering events from thread
+#### Example #3 - Triggering events from thread
 
 ```php
 class ExampleThread extends Thread
@@ -100,7 +123,7 @@ $thread = new ExampleThread();
 $thread->run($events)->wait();
 ```
 
-Use pool with 8 threads
+#### Example #4 - Use pool with 8 threads
 
 ```php
 $threads = 8  // Number of threads
@@ -140,14 +163,29 @@ do {
 $pool->cleanup();
 ```
 
-Other examples can be seen in the example file ([example.php](example.php)) and unit test ([tests/ThreadTest.php](tests/ThreadTest.php)).
 
-You can also run the performance tests, choose the number of threads and pick the best settings for your configuration by using a [test.php](https://github.com/amal/AzaThread/blob/master/test.php).
+Other examples can be seen in the file [examples/example.php](examples/example.php) and in unit test [Tests/ThreadTest.php](Tests/ThreadTest.php).
+
+You can also run the performance tests, choose the number of threads and pick the best settings for your system configuration by using [examples/speed_test.php](examples/speed_test.php).
+
+
+Tests
+-----
+
+Tests are in the `Tests` folder.
+To run them, you need PHPUnit.
+Example:
+
+    $ phpunit --configuration phpunit.xml.dist
+
+
+License
+-------
+
+MIT, see [LICENSE.md](LICENSE.md)
 
 
 Links
 -----
 
 [AzaThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
-
-AzaThread uses some components from Anizopera CMF: AzaAutoloader, AzaSocket, [AzaLibEvent](https://github.com/amal/AzaLibEvent)

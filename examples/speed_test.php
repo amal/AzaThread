@@ -1,17 +1,16 @@
 <?php
 
-namespace Aza\Tests\Components\Cli\Thread;
-use Aza\Components\Cli\Thread\Thread;
-use Aza\Components\Cli\Thread\ThreadPool;
+namespace Aza\Components\Thread;
 use Aza\Components\Socket\Socket;
 
-require __DIR__ . '/inc.thread.php';
+require __DIR__ . '/../vendor/autoload.php';
 
 
 /**
  * Performance testing
  *
- * @package system.AzaSocket
+ * @project Anizoptera CMF
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
@@ -113,12 +112,12 @@ require __DIR__ . '/inc.thread.php';
 # Settings
 #############
 
-$data    = true;	// Transmit data
-$work    = true;	// Do some work
-$tests   = 6;		// Number of iterations in tests
-$jobsT   = 10000;	// Number of jobs to do in one thread
-$jobsP   = 20000;	// Number of jobs to do in pools
-$poolMin = 2;		// Minimum threads number in pool to test
+$data    = true;  // Transmit data
+$work    = true;  // Do some work
+$tests   = 6;     // Number of iterations in tests
+$jobsT   = 10000; // Number of jobs to do in one thread
+$jobsP   = 20000; // Number of jobs to do in pools
+$poolMin = 2;     // Minimum threads number in pool to test
 
 // Disable to use sync mode
 // Thread::$useForks = false;

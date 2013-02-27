@@ -1,15 +1,16 @@
 <?php
 
-namespace Aza\Components\Cli\Thread;
-use Aza\Components\Cli\Base;
-use Aza\Components\Cli\Thread\Exceptions\Exception;
+namespace Aza\Components\Thread;
+use Aza\Components\Cli\Daemons\Daemon;
+use Aza\Components\Log\Logger;
+use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Kernel\Core;
 
 /**
  * Thread pool for AzaThread (old name - CThread).
  *
  * @project Anizoptera CMF
- * @package system.AzaThread
- * @version $Id: ThreadPool.php 3253 2012-04-10 09:35:33Z samally $
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
@@ -121,7 +122,8 @@ class ThreadPool
 	 * @param bool   $debug			Whether to enable debug mode
 	 * @param string $name			Pool name
 	 */
-	public function __construct($threadName, $maxThreads = null, $pName = null, $debug = false, $name = 'base')
+	public function __construct($threadName, $maxThreads = null,
+		$pName = null, $debug = false, $name = 'base')
 	{
 		$debug && $this->debug = true;
 
@@ -133,7 +135,9 @@ class ThreadPool
 		isset($maxThreads) && $this->setMaxThreads($maxThreads);
 		isset($pName)      && $this->pName = $pName;
 
-		$this->debug("Pool of '$threadName' threads created.");
+		$this->debug(
+			"Pool of '$threadName' threads created."
+		);
 
 		$this->createAllThreads();
 	}
@@ -215,6 +219,8 @@ class ThreadPool
 	 * @param array $failed Array of failed threads
 	 *
 	 * @return array|bool Returns array of results or FALSE if no results
+	 *
+	 * @throws Exception
 	 */
 	public function wait(&$failed = null)
 	{
@@ -226,10 +232,14 @@ class ThreadPool
 			if ($this->initializing) {
 				$w += $this->initializing;
 			}
-			$this->debug && $this->debug('Waiting for threads: ' . join(', ', $w));
+			$this->debug && $this->debug(
+				'Waiting for threads: ' . join(', ', $w)
+			);
 			Thread::waitThreads($w);
 		} else {
-			throw new Exception('Nothing to wait in pool');
+			throw new Exception(
+				'Nothing to wait in pool'
+			);
 		}
 		return $this->getResults($failed);
 	}
@@ -275,7 +285,7 @@ class ThreadPool
 	 *
 	 * @return array
 	 */
-	public function getState()
+	protected function getState()
 	{
 		$state = array();
 		foreach ($this->threads as $threadId => $thread) {
@@ -307,7 +317,9 @@ class ThreadPool
 			$this->listeners[$event] = array();
 		}
 		$this->listeners[$event][] = array($listener, $arg);
-		$this->debug("New listener binded on event [$event]");
+		$this->debug(
+			"New listener binded on event [$event]"
+		);
 	}
 
 	/**
@@ -329,7 +341,9 @@ class ThreadPool
 				if ($cb instanceof \Closure) {
 					$cb($event, $threadId, $data, $arg);
 				} else {
-					call_user_func($cb, $event, $threadId, $data, $arg);
+					call_user_func(
+						$cb, $event, $threadId, $data, $arg
+					);
 				}
 			}
 		}
@@ -363,13 +377,19 @@ class ThreadPool
 			return;
 		}
 
-		$time     = Base::getTime();
+		$time     = Daemon::getTimeForLog();
 		$poolId   = $this->id;
 		$poolName = $this->poolName;
 		$pid      = posix_getpid();
-		$message  = "{$time} [debug] [P{$poolId}.{$poolName}] #{$pid}: {$message}";
+		$message = "<small>{$time} [debug] [P{$poolId}.{$poolName}] "
+		           ."#{$pid}:</> <info>{$message}</>";
 
-		echo $message;
-		@ob_flush(); @flush();
+		if (class_exists('Aza\Kernel\Core', false) && $app = Core::$app) {
+			$app->msg($message, Logger::LVL_DEBUG);
+		} else {
+			echo strip_tags($message), PHP_EOL;
+			@ob_flush();
+			@flush();
+		}
 	}
 }

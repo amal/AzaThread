@@ -1,0 +1,19 @@
+# Composer and packages
+composer.phar
+composer.lock
+vendor/
+
+# PhpUnit
+phpunit.xml
+code_coverage/
+
+# Ignore IDE settings
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Ignore temp work dirs and files
+_/
+*~
+~*
