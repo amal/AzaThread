@@ -1,16 +1,15 @@
 <?php
 
 namespace Aza\Components\Thread;
-use Aza\Kernel\Core;
-use Aza\Components\Cli\Daemons\Daemon;
 use Aza\Components\CliBase\Base;
-use Aza\Components\LibEvent\EventBase;
 use Aza\Components\LibEvent\Event;
+use Aza\Components\LibEvent\EventBase;
 use Aza\Components\LibEvent\EventBuffer;
 use Aza\Components\Log\Logger;
-use Aza\Components\Socket\Socket;
 use Aza\Components\Socket\ASocket;
+use Aza\Components\Socket\Socket;
 use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Kernel\Core;
 
 // TODO: Try yo use ZeroMQ?
 // http://toys.lerdorf.com/archives/57-ZeroMQ-+-libevent-in-PHP.html
@@ -26,7 +25,7 @@ use Aza\Components\Thread\Exceptions\Exception;
  * Can work in synchronious mode without forks for compatibility.
  *
  * @project Anizoptera CMF
- * @package system.AzaThread
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
@@ -402,15 +401,15 @@ abstract class Thread
 		}
 
 		// Forks preparing
+		$base = self::$base;
 		if ($forks) {
 			// Init shared master event base
-			if (!self::$base) {
-				self::$base = Base::getEventBase();
+			if (!$base) {
+				self::$base = $base = Base::getEventBase();
 				$debug && $this->debug(
 					self::D_INIT . 'Master event base initialized'
 				);
 			}
-			$base = self::$base;
 
 			// Master signals
 			if (!self::$eventsSignals) {
@@ -452,7 +451,7 @@ abstract class Thread
 				// Parent
 				if (($interval = $this->timeoutMasterInitWait) > 0) {
 					$timer_name = self::TIMER_BASE . $this->id;
-					self::$base->timerStart(
+					$base->timerStart(
 						$timer_name,
 						$interval,
 						self::STATE_INIT
@@ -533,10 +532,6 @@ abstract class Thread
 
 		// Threads storage
 		unset(self::$threads[$id]);
-		unset(self::$threadsByClasses[$class][$id]);
-		if (empty(self::$threadsByClasses[$class])) {
-			unset(self::$threadsByClasses[$class]);
-		}
 
 		// Events
 		if ($base && $base->resource) {
@@ -594,6 +589,12 @@ abstract class Thread
 			// Event base cleanup
 			self::$base = null;
 			Base::cleanEventBase();
+		}
+
+		// Threads storage
+		unset(self::$threadsByClasses[$class][$id]);
+		if (empty(self::$threadsByClasses[$class])) {
+			unset(self::$threadsByClasses[$class]);
 		}
 	}
 
@@ -899,12 +900,22 @@ abstract class Thread
 	 */
 	private static function evMasterLoop()
 	{
-		($debug = self::stGetDebug()) && self::stDebug(
-			self::D_INFO . 'Loop (master) start'
+		if (!$base = self::$base) {
+			throw new Exception(
+				"Can't start loop (master). EventBase is cleaned"
+			);
+		}
+
+		($debug = self::stGetDebug($thread)) && self::stDebug(
+			self::D_INFO . 'Loop (master) start',
+			$thread
 		);
-		self::$base->loop();
+
+		$base->loop();
+
 		$debug && self::stDebug(
-			self::D_INFO . 'Loop (master) end'
+			self::D_INFO . 'Loop (master) end',
+			$thread
 		);
 	}
 
@@ -1355,7 +1366,7 @@ abstract class Thread
 			$die = true;
 		}
 		// Worker check
-		elseif (!Base::getProcessIsAlive($this->parent_pid)) {
+		else if (!Base::getProcessIsAlive($this->parent_pid)) {
 			$this->debug(
 				self::D_WARN . 'Parent is dead, exiting'
 			);
@@ -1983,7 +1994,8 @@ abstract class Thread
 		if ($debug = self::stGetDebug($thread)) {
 			$prefix = $thread->isChild ? '=>' : '<=';
 			self::stDebug(
-				self::D_IPC . " {$prefix} Caught $name ($signo) signal"
+				self::D_IPC . " {$prefix} Caught $name ($signo) signal",
+				$thread
 			);
 		}
 		$name  = "m{$name}";
@@ -2002,7 +2014,8 @@ abstract class Thread
 		// Default action - shutdown
 		else {
 			$debug && self::stDebug(
-				self::D_INFO . 'Unhandled signal, exiting'
+				self::D_INFO . 'Unhandled signal, exiting',
+				$thread
 			);
 			self::$base->loopBreak();
 			exit;
@@ -2018,17 +2031,17 @@ abstract class Thread
 		$debug = self::stGetDebug($thread);
 		while (0 < $pid = pcntl_waitpid(-1, $status, WNOHANG|WUNTRACED)) {
 			$debug && self::stDebug(
-				self::D_INFO . "SIGCHLD is for pid #{$pid}"
+				self::D_INFO . "SIGCHLD is for pid #{$pid}",
+				$thread
 			);
 			if ($pid > 0 && isset(self::$threadsByPids[$pid])) {
 				if (isset(self::$threads[$threadId = self::$threadsByPids[$pid]])) {
 					$thread = self::$threads[$threadId];
 					$debug && self::stDebug(
-						self::D_INFO . "SIGCHLD is for thread #{$threadId}"
+						self::D_INFO . "SIGCHLD is for thread #{$threadId}",
+						$thread
 					);
-					if (!$thread->cleaning) {
-						$thread->stopWorker();
-					}
+					$thread->cleaning || $thread->stopWorker();
 				}
 			}
 		}
@@ -2113,14 +2126,19 @@ abstract class Thread
 
 
 	/**
-	 * Shutdowns the child process properly
+	 * Shutdowns the child process properly.
+	 * Override if you need custom shutdown logic.
 	 */
 	protected function shutdown()
 	{
 		if ($this->isChild) {
 			$this->debug(self::D_INFO . 'Child exit');
 			$this->cleanup();
-			Core::stopApplication(true);
+
+			class_exists('Aza\Kernel\Core', false)
+					&& Core::stopApplication(true);
+
+			exit;
 		}
 	}
 
@@ -2150,18 +2168,30 @@ abstract class Thread
 	{
 		if ($thread) {
 			$id = $thread->id;
-		} elseif (self::stGetDebug($thread)) {
+		} else if (self::stGetDebug($thread)) {
 			$id = '-';
 		} else {
 			return;
 		}
 
-		$time = Daemon::getTimeForLog();
-		$role = $thread->isChild ? 'W' : '-'; // Master|Worker
+		$time = Base::getTimeForLog();
+		if ($thread) {
+			$role = $thread->isChild ? 'W' : '-'; // Master|Worker
+			$pid  = $thread->pid;
+		} else {
+			// Unknown (called in destructor or something similar)
+			$role = $pid = '~';
+		}
 		$message = "<small>{$time} [debug] [T{$id}.{$role}] "
-		           ."#{$thread->pid}:</> <info>{$message}</>";
+		           ."#{$pid}:</> <info>{$message}</>";
 
-		Core::$app->msg($message, Logger::LVL_DEBUG);
+		if (class_exists('Aza\Kernel\Core', false) && $app = Core::$app) {
+			$app->msg($message, Logger::LVL_DEBUG);
+		} else {
+			echo strip_tags($message), PHP_EOL;
+			@ob_flush();
+			@flush();
+		}
 	}
 
 	/**
@@ -2175,16 +2205,20 @@ abstract class Thread
 	 */
 	private static function stGetDebug(&$thread = null)
 	{
-		if (__CLASS__ === $class = get_called_class()) {
-			$class = key(self::$threadsByClasses);
-		}
+		static $class, $debug;
+
+		isset($class)
+		    || __CLASS__ === ($class = get_called_class())
+		    || $class = key(self::$threadsByClasses);
+
 		if (empty(self::$threadsByClasses[$class])) {
-			throw new Exception(
-				"Couldn't find threads of type $class"
-			);
+			// Couldn't find threads of type $class
+			// Called in destructor or something similar
+			return $debug;
 		}
+
 		$thread = reset(self::$threadsByClasses[$class]);
-		return $thread->debug;
+		return $debug = $thread->debug;
 	}
 
 	#endregion

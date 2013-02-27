@@ -1,16 +1,16 @@
 <?php
 
 namespace Aza\Components\Thread;
-use Aza\Kernel\Core;
 use Aza\Components\Cli\Daemons\Daemon;
 use Aza\Components\Log\Logger;
 use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Kernel\Core;
 
 /**
  * Thread pool for AzaThread (old name - CThread).
  *
  * @project Anizoptera CMF
- * @package system.AzaThread
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
@@ -384,6 +384,12 @@ class ThreadPool
 		$message = "<small>{$time} [debug] [P{$poolId}.{$poolName}] "
 		           ."#{$pid}:</> <info>{$message}</>";
 
-		Core::$app->msg($message, Logger::LVL_DEBUG);
+		if (class_exists('Aza\Kernel\Core', false) && $app = Core::$app) {
+			$app->msg($message, Logger::LVL_DEBUG);
+		} else {
+			echo strip_tags($message), PHP_EOL;
+			@ob_flush();
+			@flush();
+		}
 	}
 }

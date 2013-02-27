@@ -7,7 +7,7 @@ use RuntimeException as BaseExeption;
  * Basic {@link Thread} exception.
  *
  * @project Anizoptera CMF
- * @package system.AzaThread
+ * @package system.thread
  * @author  Amal Samally <amal.samally at gmail.com>
  * @license MIT
  */
