@@ -1,0 +1,20 @@
+language: php
+
+php:
+  - 5.3.3
+  - 5.3
+  - 5.4
+  - 5.5
+
+matrix:
+  allow_failures:
+    - php: 5.5
+
+before_script:
+  - sudo apt-get install -y libevent-dev
+  - sh -c " if [ \"\$(php --re libevent | grep 'does not exist')\" != '' ]; then
+              (yes '' | pecl install libevent-beta)
+            fi"
+  - composer install
+
+script: phpunit --configuration phpunit.xml.dist

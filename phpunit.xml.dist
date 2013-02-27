@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<phpunit backupGlobals="false"
+         backupStaticAttributes="false"
+         colors="true"
+         convertErrorsToExceptions="true"
+         convertNoticesToExceptions="true"
+         convertWarningsToExceptions="true"
+         processIsolation="false"
+         stopOnError="false"
+         stopOnFailure="false"
+         stopOnIncomplete="false"
+         stopOnSkipped="false"
+         syntaxCheck="false"
+         bootstrap="vendor/autoload.php"
+         strict="false"
+         verbose="false"
+		>
+	<php>
+		<ini name="memory_limit" value="-1" />
+		<ini name="precision" value="16" />
+	</php>
+
+	<testsuites>
+		<testsuite name="Anizoptera CMF Test Suite">
+			<directory>./Tests/</directory>
+		</testsuite>
+	</testsuites>
+
+	<groups>
+		<exclude>
+			<group>benchmark</group>
+			<group>performance</group>
+		</exclude>
+	</groups>
+
+	<filter>
+		<whitelist>
+			<directory>./</directory>
+			<exclude>
+				<directory>./examples</directory>
+				<directory>./Tests</directory>
+				<directory>./vendor</directory>
+			</exclude>
+		</whitelist>
+	</filter>
+</phpunit>

@@ -1,0 +1,39 @@
+{
+	"name": "aza/thread",
+	"description": "AzaThread - Anizoptera CMF simple and powerful threads emulation component for PHP (based on forks).",
+	"keywords": [
+		"fork", "thread", "async", "parallel", "serialization", "multi-thread", "daemon"
+	],
+	"homepage": "https://github.com/Anizoptera/AzaThread",
+	"license": "MIT",
+	"support": {
+		"issues": "https://github.com/Anizoptera/AzaThread/issues"
+	},
+	"authors": [
+		{"name": "Amal Samally", "email": "amal.samally@gmail.com", "homepage": "https://github.com/amal"},
+		{"name": "AzaGroup Members"}
+	],
+	"require": {
+		"php": ">=5.3.3",
+		"aza/clibase": "~1.0",
+		"aza/libevent": "~1.0",
+		"aza/socket": "~1.0"
+	},
+	"suggest": {
+		"ext-posix": "Only synchronous compatibility mode will be available without it",
+		"ext-pcntl": "Only synchronous compatibility mode will be available without it",
+		"ext-libevent": "Only synchronous compatibility mode will be available without it"
+	},
+	"autoload": {
+		"psr-0": {
+			"Aza\\Components\\Thread": ""
+		}
+	},
+	"target-dir": "Aza/Components/Thread",
+	"extra": {
+		"branch-alias": {
+			"dev-master": "1.x-dev"
+		}
+	},
+	"minimum-stability": "dev"
+}
