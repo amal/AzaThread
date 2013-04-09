@@ -5,6 +5,7 @@ CHANGELOG
 
 
 09.04.2013
+- **IMPROVED:** `Thread::forkThread` method visibility changed to protected (Issue #3, amal)
 - **MINOR:** Small code style, comments and tests improvements (amal)
 - **FIXED:** Remove dependency on Daemon::getTimeForLog (Issue #1, amal)
 

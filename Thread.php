@@ -606,13 +606,16 @@ abstract class Thread
 
 
 	/**
-	 * Thread forking
+	 * Thread forking.
+	 *
+	 * Override this method if you want to do
+	 * something after/before forking.
 	 *
 	 * @throws Exception
 	 *
 	 * @return bool TRUE in parent, FALSE in child
 	 */
-	private function forkThread()
+	protected function forkThread()
 	{
 		// Checks
 		if (!self::$useForks) {
