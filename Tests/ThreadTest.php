@@ -7,6 +7,7 @@ use Aza\Components\Thread\Thread;
 use Aza\Components\Thread\ThreadPool;
 use Exception;
 use PHPUnit_Framework_TestCase as TestCase;
+use ReflectionMethod;
 
 /**
  * Testing thread system
@@ -33,6 +34,15 @@ class ThreadTest extends TestCase
 	/**
 	 * {@inheritdoc}
 	 */
+	protected function setUp()
+	{
+		// Set value to default
+		Thread::$useForks = self::$defForks;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
 	public static function tearDownAfterClass()
 	{
 		Thread::$useForks = self::$defForks;
@@ -40,8 +50,56 @@ class ThreadTest extends TestCase
 	}
 
 
+
+	/**
+	 * Tests threads debugging
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function _testDebug()
+	{
+		$this->expectOutputString('');
+
+		Thread::$useForks = false;
+
+		$value = 'test12345';
+
+		// Test thread debug output
+		$thread = new TestThreadReturnFirstArgument();
+		$this->assertSame(Thread::STATE_WAIT, $thread->getState());
+		$ref = new ReflectionMethod($thread, 'debug');
+		$ref->setAccessible(true);
+		ob_start(); ob_start();
+		$thread->debug = true;
+		$ref->invoke($thread, $value);
+		$thread->debug = false;
+		ob_get_clean();
+		$output = ob_get_clean();
+		$this->assertContains($value, $output);
+		$thread->cleanup();
+
+		// Test thread pool debug output
+		$className = get_class($thread);
+		ob_start(); ob_start();
+		$pool = new ThreadPool($className);
+		$ref = new ReflectionMethod($pool, 'debug');
+		$ref->setAccessible(true);
+		$pool->debug = true;
+		$ref->invoke($pool, $value);
+		$pool->debug = false;
+		ob_get_clean();
+		$output = ob_get_clean();
+		$this->assertContains($value, $output);
+		$pool->cleanup();
+	}
+
+
 	/**
 	 * Tests threads in synchronous mode
+	 *
+	 * @author amal
+	 * @group unit
 	 */
 	public function testSync()
 	{
@@ -78,13 +136,16 @@ class ThreadTest extends TestCase
 
 		// Sync pool events
 		$this->processPoolEvent($debug);
-
-
-		Thread::$useForks = self::$defForks;
 	}
 
 	/**
 	 * Tests threads in asynchronous mode
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
 	 */
 	public function testAsync()
 	{
@@ -100,14 +161,12 @@ class ThreadTest extends TestCase
 			Thread::IPC_IGBINARY  => 'igbinary_serialize',
 			Thread::IPC_SERIALIZE => false,
 		);
-		$sockModes     = array(true, false);
+		$sockModes = array(true, false);
+
 		$defDataMode   = Thread::$ipcDataMode;
 		$defSocketMode = Socket::$useSockets;
 
-
 		$debug = false;
-		Thread::$useForks = true;
-
 
 		foreach ($sockModes as $sockMode) {
 			Socket::$useSockets = $sockMode;
@@ -157,8 +216,6 @@ class ThreadTest extends TestCase
 			}
 		}
 
-
-		Thread::$useForks    = self::$defForks;
 		Thread::$ipcDataMode = $defDataMode;
 		Socket::$useSockets  = $defSocketMode;
 	}
@@ -181,7 +238,6 @@ class ThreadTest extends TestCase
 			     '-----------------------', PHP_EOL;
 		}
 
-		/** @var $thread Thread */
 		$thread = $withChild
 				? new TestThreadWithChilds($debug)
 				: new TestThreadReturnFirstArgument($debug);
@@ -194,7 +250,7 @@ class ThreadTest extends TestCase
 			$value = $bigResult ? str_repeat($i, 100000) : $i;
 			$thread->run($value)->wait();
 			$state = $thread->getState();
-			$this->assertEquals(Thread::STATE_WAIT, $state);
+			$this->assertSame(Thread::STATE_WAIT, $state);
 			$sucess = $thread->getSuccess();
 			$this->assertTrue($sucess);
 			$result = $thread->getResult();
@@ -232,7 +288,7 @@ class ThreadTest extends TestCase
 			$j++;
 			$thread->run($value, $j)->wait();
 			$state = $thread->getState();
-			$this->assertEquals(Thread::STATE_WAIT, $state);
+			$this->assertSame(Thread::STATE_WAIT, $state);
 			if ($thread->getSuccess()) {
 				$result = $thread->getResult();
 				$this->assertEquals($value, $result);
@@ -240,7 +296,7 @@ class ThreadTest extends TestCase
 			}
 		}
 
-		$this->assertEquals($num*2, $j);
+		$this->assertSame($num*2, $j);
 
 		$thread->cleanup();
 	}
@@ -268,9 +324,9 @@ class ThreadTest extends TestCase
 		$last = 0;
 		$cb = function($event, $e_data, $e_arg) use ($arg, $test, &$last) {
 			/** @var $test TestCase */
-			$test->assertEquals($arg, $e_arg);
-			$test->assertEquals(TestThreadEvents::EV_PROCESS, $event);
-			$test->assertEquals($last++, $e_data);
+			$test->assertSame($arg, $e_arg);
+			$test->assertSame(TestThreadEvents::EV_PROCESS, $event);
+			$test->assertSame($last++, $e_data);
 		};
 		$thread->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
 
@@ -282,12 +338,12 @@ class ThreadTest extends TestCase
 			$last = 0;
 			$thread->run($events)->wait();
 			$state = $thread->getState();
-			$this->assertEquals(Thread::STATE_WAIT, $state);
+			$this->assertSame(Thread::STATE_WAIT, $state);
 			$sucess = $thread->getSuccess();
 			$this->assertTrue($sucess);
 		}
 
-		$this->assertEquals($events, $last);
+		$this->assertSame($events, $last);
 
 		$thread->cleanup();
 	}
@@ -351,15 +407,15 @@ class ThreadTest extends TestCase
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertEquals(0, $num);
+		$this->assertSame(0, $num);
 
-		$this->assertEquals(
+		$this->assertSame(
 			$pool->threadsCount, count($worked),
 			'Worked threads count is not equals to real threads count'
 		);
 
 		$pool->cleanup();
-		$this->assertEquals(0, $pool->threadsCount);
+		$this->assertSame(0, $pool->threadsCount);
 		$this->assertEmpty($pool->threads);
 		$this->assertEmpty($pool->waiting);
 		$this->assertEmpty($pool->working);
@@ -398,16 +454,16 @@ class ThreadTest extends TestCase
 		$jobs = $worked = array();
 		$cb = function($event, $threadId, $e_data, $e_arg) use ($arg, $test, &$jobs, &$async) {
 			/** @var $test TestCase */
-			$test->assertEquals($arg, $e_arg);
-			$test->assertEquals(TestThreadEvents::EV_PROCESS, $event);
+			$test->assertSame($arg, $e_arg);
+			$test->assertSame(TestThreadEvents::EV_PROCESS, $event);
 			if ($async) {
 				$test->assertTrue(isset($jobs[$threadId]));
-				$test->assertEquals($jobs[$threadId]++, $e_data);
+				$test->assertSame($jobs[$threadId]++, $e_data);
 			} else {
 				if (!isset($jobs[$threadId])) {
 					$jobs[$threadId] = 0;
 				}
-				$test->assertEquals($jobs[$threadId]++, $e_data);
+				$test->assertSame($jobs[$threadId]++, $e_data);
 			}
 		};
 		$pool->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
@@ -432,22 +488,22 @@ class ThreadTest extends TestCase
 				foreach ($results as $threadId => $res) {
 					$num--;
 					$this->assertTrue(isset($jobs[$threadId]));
-					$this->assertEquals($events, $jobs[$threadId]);
+					$this->assertSame($events, $jobs[$threadId]);
 					unset($jobs[$threadId]);
 				}
 			}
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertEquals(0, $num);
+		$this->assertSame(0, $num);
 
-		$this->assertEquals(
+		$this->assertSame(
 			$pool->threadsCount, count($worked),
 			'Worked threads count is not equals to real threads count'
 		);
 
 		$pool->cleanup();
-		$this->assertEquals(0, $pool->threadsCount);
+		$this->assertSame(0, $pool->threadsCount);
 		$this->assertEmpty($pool->threads);
 		$this->assertEmpty($pool->waiting);
 		$this->assertEmpty($pool->working);
@@ -515,15 +571,15 @@ class ThreadTest extends TestCase
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertEquals(0, $num);
+		$this->assertSame(0, $num);
 
-		$this->assertEquals(
+		$this->assertSame(
 			$pool->threadsCount, count($worked),
 			'Worked threads count is not equals to real threads count'
 		);
 
 		$pool->cleanup();
-		$this->assertEquals(0, $pool->threadsCount);
+		$this->assertSame(0, $pool->threadsCount);
 		$this->assertEmpty($pool->threads);
 		$this->assertEmpty($pool->waiting);
 		$this->assertEmpty($pool->working);
@@ -592,8 +648,6 @@ class TestThreadNothing extends Thread
  */
 class TestThreadWithChilds extends Thread
 {
-
-
 	/**
 	 * Main processing.
 	 *
@@ -649,7 +703,6 @@ class TestThreadWork extends Thread
 class TestThreadEvents extends Thread
 {
 	const EV_PROCESS = 'process';
-
 
 	/**
 	 * Main processing.

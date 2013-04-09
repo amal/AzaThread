@@ -47,8 +47,8 @@ abstract class Thread
 	const P_SERIAL = 0x10;
 
 	// Types of IPC data transfer modes
-	const IPC_IGBINARY  = 1; // Igbinary serialization   (8th, 6625 jps)
-	const IPC_SERIALIZE = 2; // Native PHP serialization (8th, 6501 jps)
+	const IPC_IGBINARY  = 1; // Igbinary serialization   (~6625 jobs per second in tests with 8 threads)
+	const IPC_SERIALIZE = 2; // Native PHP serialization (~6501 jobs per second in tests with 8 threads)
 
 	// Timer names
 	const TIMER_BASE = 'thread:base:';
@@ -329,7 +329,8 @@ abstract class Thread
 	protected $timeoutMasterResultWait = 5;
 
 	/**
-	 * Maximum worker job waiting timeout. After it spawned child will die.
+	 * Maximum worker job waiting timeout.
+	 * After it spawned child will die.
 	 * Set it to less than one, to disable.
 	 */
 	protected $timeoutWorkerJobWait = -1;
@@ -353,6 +354,9 @@ abstract class Thread
 
 	/**
 	 * Whether to show debugging information
+	 * DO NOT USE IN PRODUCTION!
+	 *
+	 * @access protected
 	 */
 	public $debug = false;
 
@@ -369,7 +373,8 @@ abstract class Thread
 	 * @param string           $pName Thread worker process name
 	 * @param ThreadPool $pool  Thread pool
 	 */
-	public function __construct($debug = false, $pName = null, $pool = null)
+	public function __construct($debug = false, $pName = null,
+		$pool = null)
 	{
 		$this->id = $id = ++self::$threadsCount;
 		$class = get_called_class();
@@ -418,9 +423,10 @@ abstract class Thread
 				} else {
 					$signo = SIGCHLD;
 					$e = new Event();
-					$e->setSignal($signo, array(get_called_class(), '_mEvCbSignal'))
-							->setBase($base)
-							->add();
+					$e->setSignal(
+						$signo,
+						array(get_called_class(), '_mEvCbSignal')
+					)->setBase($base)->add();
 					self::$eventsSignals[$signo] = $e;
 					$debug && $this->debug(
 						self::D_INIT . 'Master SIGCHLD event signal handler initialized'
@@ -1210,8 +1216,9 @@ abstract class Thread
 			if ($pool = $this->pool) {
 				// Waiting
 				if ($wait) {
-					if (!$this->success && empty($pool->initializing[$threadId])
-						&& isset(self::$waitingThreads[$threadId])
+					if (!$this->success
+					    && empty($pool->initializing[$threadId])
+					    && isset(self::$waitingThreads[$threadId])
 					) {
 						$pool->failed[$threadId] = $threadId;
 					}
@@ -1309,7 +1316,9 @@ abstract class Thread
 			$packet = $p['packet'];
 			$data   = $p['data'];
 
-			$debug && $this->debug(self::D_IPC . " => Packet: [$packet]");
+			$debug && $this->debug(
+				self::D_IPC . " => Packet: [$packet]"
+			);
 
 			// Job packet
 			if ($packet & self::P_JOB) {
@@ -1531,11 +1540,17 @@ abstract class Thread
 	/**
 	 * Sends packet to parent
 	 *
-	 * @param int    $packet Integer packet type (see self::P_* constants)
-	 * @param string $value  Packet value (without ":" character)
-	 * @param mixed  $data   Mixed packet data
+	 * @param int $packet <p>
+	 * Integer packet type (see self::P_* constants)
+	 * </p>
+	 * @param string $value [optional] <p>
+	 * Packet value (without ":" character)
+	 * </p>
+	 * @param mixed $data [optional] <p>
+	 * Mixed packet data
+	 * </p>
 	 *
-	 * @throws Exception
+	 * @throws Exception if can't send packet to parent
 	 */
 	private function sendPacketToParent($packet, $value = '', $data = null)
 	{
@@ -2053,7 +2068,6 @@ abstract class Thread
 
 	#region Shutdown
 
-
 	/**
 	 * Attempts to stop the thread worker process
 	 *
@@ -2068,7 +2082,9 @@ abstract class Thread
 		if ($this->isForked) {
 			if ($this->isAlive()) {
 				if ($debug = $this->debug) {
-					$do = ($signo == SIGSTOP || $signo == SIGKILL) ? 'Kill' : 'Stop';
+					$do = ($signo == SIGSTOP || $signo == SIGKILL)
+							? 'Kill'
+							: 'Stop';
 					$this->debug(
 						self::D_INFO . "$do worker"
 					);
@@ -2135,6 +2151,7 @@ abstract class Thread
 			$this->debug(self::D_INFO . 'Child exit');
 			$this->cleanup();
 
+			// TODO: Event dispatcher?
 			class_exists('Aza\Kernel\Core', false)
 					&& Core::stopApplication(true);
 
@@ -2185,7 +2202,9 @@ abstract class Thread
 		$message = "<small>{$time} [debug] [T{$id}.{$role}] "
 		           ."#{$pid}:</> <info>{$message}</>";
 
-		if (class_exists('Aza\Kernel\Core', false) && $app = Core::$app) {
+		if (class_exists('Aza\Kernel\Core', false)
+		    && $app = Core::$app
+		) {
 			$app->msg($message, Logger::LVL_DEBUG);
 		} else {
 			echo strip_tags($message), PHP_EOL;

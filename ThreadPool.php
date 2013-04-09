@@ -1,7 +1,7 @@
 <?php
 
 namespace Aza\Components\Thread;
-use Aza\Components\Cli\Daemons\Daemon;
+use Aza\Components\CliBase\Base;
 use Aza\Components\Log\Logger;
 use Aza\Components\Thread\Exceptions\Exception;
 use Aza\Kernel\Core;
@@ -106,9 +106,10 @@ class ThreadPool
 	public $threadsCount = 0;
 
 	/**
-	 * Whether to show debugging information
+	 * Whether to show debugging information.
+	 * DO NOT USE IN PRODUCTION!
 	 *
-	 * @var bool
+	 * @access protected
 	 */
 	public $debug = false;
 
@@ -116,11 +117,11 @@ class ThreadPool
 	/**
 	 * Thread pool initialization
 	 *
-	 * @param string $threadName	Thread class name
-	 * @param int    $maxThreads	Maximum threads number in pool
-	 * @param string $pName			Thread process name
-	 * @param bool   $debug			Whether to enable debug mode
-	 * @param string $name			Pool name
+	 * @param string $threadName Thread class name
+	 * @param int    $maxThreads Maximum threads number in pool
+	 * @param string $pName      Thread process name
+	 * @param bool   $debug      Whether to enable debug mode
+	 * @param string $name       Pool name
 	 */
 	public function __construct($threadName, $maxThreads = null,
 		$pName = null, $debug = false, $name = 'base')
@@ -169,7 +170,9 @@ class ThreadPool
 	 */
 	protected function createAllThreads()
 	{
-		if (($count = &$this->threadsCount) < ($tMax = $this->maxThreads)) {
+		if (($count = &$this->threadsCount)
+		    < ($tMax = $this->maxThreads)
+		) {
 			do {
 				/** @var $thread Thread */
 				$thread = $this->tName;
@@ -218,7 +221,8 @@ class ThreadPool
 	 *
 	 * @param array $failed Array of failed threads
 	 *
-	 * @return array|bool Returns array of results or FALSE if no results
+	 * @return array|bool Returns array of results
+	 * or FALSE if no results
 	 *
 	 * @throws Exception
 	 */
@@ -377,14 +381,16 @@ class ThreadPool
 			return;
 		}
 
-		$time     = Daemon::getTimeForLog();
+		$time     = Base::getTimeForLog();
 		$poolId   = $this->id;
 		$poolName = $this->poolName;
 		$pid      = posix_getpid();
 		$message = "<small>{$time} [debug] [P{$poolId}.{$poolName}] "
 		           ."#{$pid}:</> <info>{$message}</>";
 
-		if (class_exists('Aza\Kernel\Core', false) && $app = Core::$app) {
+		if (class_exists('Aza\Kernel\Core', false)
+		    && $app = Core::$app
+		) {
 			$app->msg($message, Logger::LVL_DEBUG);
 		} else {
 			echo strip_tags($message), PHP_EOL;

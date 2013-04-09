@@ -4,6 +4,10 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+09.04.2013
+- **MINOR:** Small code style, comments and tests improvements (amal)
+- **FIXED:** Remove dependency on Daemon::getTimeForLog (Issue #1, amal)
+
 08.04.2013
 - **MINOR:** Massive README and CHANGELOG improvements (amal)
 
