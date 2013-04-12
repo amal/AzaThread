@@ -17,10 +17,11 @@ use ReflectionMethod;
  */
 class ThreadTest extends TestCase
 {
-	/**
-	 * @var bool
-	 */
-	protected static $defForks;
+	/** @var bool */
+	protected static $defUseForks;
+
+	/** @var int */
+	protected static $defIpcDataMode;
 
 
 	/**
@@ -28,7 +29,8 @@ class ThreadTest extends TestCase
 	 */
 	public static function setUpBeforeClass()
 	{
-		self::$defForks = Thread::$useForks;
+		self::$defUseForks    = Thread::$useForks;
+		self::$defIpcDataMode = Thread::$ipcDataMode;
 	}
 
 	/**
@@ -36,8 +38,9 @@ class ThreadTest extends TestCase
 	 */
 	protected function setUp()
 	{
-		// Set value to default
-		Thread::$useForks = self::$defForks;
+		// Set values to default
+		Thread::$useForks    = self::$defUseForks;
+		Thread::$ipcDataMode = self::$defIpcDataMode;
 	}
 
 	/**
@@ -45,7 +48,11 @@ class ThreadTest extends TestCase
 	 */
 	public static function tearDownAfterClass()
 	{
-		Thread::$useForks = self::$defForks;
+		// Set values to default
+		Thread::$useForks    = self::$defUseForks;
+		Thread::$ipcDataMode = self::$defIpcDataMode;
+
+		// Cleanup
 		gc_collect_cycles();
 	}
 
@@ -57,7 +64,7 @@ class ThreadTest extends TestCase
 	 * @author amal
 	 * @group unit
 	 */
-	public function _testDebug()
+	public function testDebug()
 	{
 		$this->expectOutputString('');
 
@@ -95,51 +102,135 @@ class ThreadTest extends TestCase
 	}
 
 
+	#region Synchronous (fallback mode) tests
+
 	/**
-	 * Tests threads in synchronous mode
+	 * Simple thread test (sync mode)
 	 *
 	 * @author amal
 	 * @group unit
 	 */
-	public function testSync()
+	public function testSyncThread()
 	{
-		$debug = false;
 		Thread::$useForks = false;
-
-
-		// Sync thread
-		$this->processThread($debug);
-
-		// Sync thread with big data
-		$this->processThread($debug, true);
-
-		// Sync thread with childs
-		$this->processThread($debug, false, true);
-
-		// Sync thread with childs and big data
-		$this->processThread($debug, true, true);
-
-		// Sync events
-		$this->processThreadEvent($debug);
-
-		// Sync pool
-		$this->processPool($debug);
-
-		// Sync pool with big data
-		$this->processPool($debug, true);
-
-		// Sync pool with childs
-		$this->processPool($debug, false, true);
-
-		// Sync pool with childs and big data
-		$this->processPool($debug, true, true);
-
-		// Sync pool events
-		$this->processPoolEvent($debug);
+		$this->processThread(false);
 	}
 
 	/**
-	 * Tests threads in asynchronous mode
+	 * Thread test with big data (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadWithBigData()
+	{
+		Thread::$useForks = false;
+		$this->processThread(false, true);
+	}
+
+	/**
+	 * Thread test with childs (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadWithChilds()
+	{
+		Thread::$useForks = false;
+		$this->processThread(false, false, true);
+	}
+
+	/**
+	 * Thread test with childs and big data (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadWithBigDataAndChilds()
+	{
+		Thread::$useForks = false;
+		$this->processThread(false, true, true);
+	}
+
+	/**
+	 * Thread events test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadWithEvents()
+	{
+		Thread::$useForks = false;
+		$this->processThreadEvent(false);
+	}
+
+	/**
+	 * Simple thread pool test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPool()
+	{
+		Thread::$useForks = false;
+		$this->processPool(false);
+	}
+
+	/**
+	 * Thread pool test with big data (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolWithBigData()
+	{
+		Thread::$useForks = false;
+		$this->processPool(false, true);
+	}
+
+	/**
+	 * Thread pool test with childs (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolWithChilds()
+	{
+		Thread::$useForks = false;
+		$this->processPool(false, false, true);
+	}
+
+	/**
+	 * Thread pool test with childs and big data (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolWithBigDataAndChilds()
+	{
+		Thread::$useForks = false;
+		$this->processPool(false, true, true);
+	}
+
+	/**
+	 * Thread pool events test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolWithEvents()
+	{
+		Thread::$useForks = false;
+		$this->processPoolEvent(false);
+	}
+
+	#endregion
+
+
+	#region Full feature tests
+
+	/**
+	 * Simple thread test
 	 *
 	 * @author amal
 	 * @group integrational
@@ -147,7 +238,178 @@ class ThreadTest extends TestCase
 	 * @requires extension posix
 	 * @requires extension pcntl
 	 */
-	public function testAsync()
+	public function testThread()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread(false);
+		});
+	}
+
+	/**
+	 * Thread test with big data
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithBigData()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread(false, true);
+		});
+	}
+
+	/**
+	 * Thread test with childs
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithChilds()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread(false, false, true);
+		});
+	}
+
+	/**
+	 * Thread test with childs and big data
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithBigDataAndChilds()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread(false, true, true);
+		});
+	}
+
+	/**
+	 * Thread events test
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithEvents()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThreadEvent(false);
+		});
+	}
+
+	/**
+	 * Simple thread pool test
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPool()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool(false);
+		});
+	}
+
+	/**
+	 * Thread pool test with big data
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPoolWithBigData()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool(false, true);
+		});
+	}
+
+	/**
+	 * Thread pool test with childs
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPoolWithChilds()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool(false, false, true);
+		});
+	}
+
+	/**
+	 * Thread pool test with childs and big data
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPoolWithBigDataAndChilds()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool(false, true, true);
+		});
+	}
+
+	/**
+	 * Thread pool events test
+	 *
+	 * @author amal
+	 * @group integrational
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPoolWithEvents()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPoolEvent(false);
+		});
+	}
+
+	#endregion
+
+
+	#region Auxiliary (helper) test methods
+
+	/**
+	 * Helper method for testing threads in asynchronous mode
+	 *
+	 * @param callable $callback
+	 */
+	public function processAsyncTest($callback)
 	{
 		if (!Thread::$useForks) {
 			$this->markTestSkipped(
@@ -157,19 +419,16 @@ class ThreadTest extends TestCase
 			return;
 		}
 
-		$ipcModes = array(
+		$ipcModes    = array(
 			Thread::IPC_IGBINARY  => 'igbinary_serialize',
 			Thread::IPC_SERIALIZE => false,
 		);
-		$sockModes = array(true, false);
+		$socketModes = array(true, false);
 
-		$defDataMode   = Thread::$ipcDataMode;
 		$defSocketMode = Socket::$useSockets;
 
-		$debug = false;
-
-		foreach ($sockModes as $sockMode) {
-			Socket::$useSockets = $sockMode;
+		foreach ($socketModes as $socketMode) {
+			Socket::$useSockets = $socketMode;
 
 			foreach ($ipcModes as $mode => $check) {
 				if ($check && !function_exists($check)) {
@@ -178,45 +437,10 @@ class ThreadTest extends TestCase
 
 				Thread::$ipcDataMode = $mode;
 
-				// Async thread
-				$this->processThread($debug);
-
-				// Async thread with big data
-				$this->processThread($debug, true);
-
-				// Async thread with childs
-				$this->processThread($debug, false, true);
-
-				// Async thread with childs and big data
-				$this->processThread($debug, true, true);
-
-				// Async events
-				$this->processThreadEvent($debug);
-
-				// Async errorable thread
-				$this->processThreadErrorable($debug);
-
-				// Async pool
-				$this->processPool($debug);
-
-				// Async pool with big data
-				$this->processPool($debug, true);
-
-				// Async pool with childs
-				$this->processPool($debug, false, true);
-
-				// Async pool with childs and big data
-				$this->processPool($debug, true, true);
-
-				// Async pool events
-				$this->processPoolEvent($debug, true);
-
-				// Async errorable pool
-				$this->processPoolErrorable($debug);
+				$callback();
 			}
 		}
 
-		Thread::$ipcDataMode = $defDataMode;
 		Socket::$useSockets  = $defSocketMode;
 	}
 
@@ -228,14 +452,14 @@ class ThreadTest extends TestCase
 	 * @param bool $bigResult
 	 * @param bool $withChild
 	 */
-	function processThread($debug, $bigResult = false, $withChild = false)
+	function processThread($debug = false, $bigResult = false, $withChild = false)
 	{
 		$num = 10;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Thread test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Thread test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$thread = $withChild
@@ -265,14 +489,14 @@ class ThreadTest extends TestCase
 	 *
 	 * @param bool $debug
 	 */
-	function processThreadErrorable($debug)
+	function processThreadErrorable($debug = false)
 	{
 		$num = 10;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Thread errorable test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Thread errorable test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$thread = new TestThreadReturnArgErrors($debug);
@@ -306,15 +530,15 @@ class ThreadTest extends TestCase
 	 *
 	 * @param bool $debug
 	 */
-	function processThreadEvent($debug)
+	function processThreadEvent($debug = false)
 	{
 		$events = 15;
 		$num = 3;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Thread events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Thread events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$thread = new TestThreadEvents($debug);
@@ -358,15 +582,15 @@ class ThreadTest extends TestCase
 	 *
 	 * @throws Exception
 	 */
-	function processPool($debug, $bigResult = false, $withChild = false)
+	function processPool($debug = false, $bigResult = false, $withChild = false)
 	{
 		$num     = 100;
 		$threads = 4;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$thread = $withChild
@@ -432,7 +656,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @throws Exception
 	 */
-	function processPoolEvent($debug, $async = false)
+	function processPoolEvent($debug = false, $async = false)
 	{
 		$events  = 5;
 		$num     = 15;
@@ -440,8 +664,8 @@ class ThreadTest extends TestCase
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Thread pool events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Thread pool events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$pool = new ThreadPool(
@@ -526,8 +750,8 @@ class ThreadTest extends TestCase
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			     "Errorable thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
-			     '-----------------------', PHP_EOL;
+			"Errorable thread pool test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
 		}
 
 		$pool = new ThreadPool(
@@ -587,6 +811,8 @@ class ThreadTest extends TestCase
 		$this->assertEmpty($pool->failed);
 		$this->assertEmpty($pool->results);
 	}
+
+	#endregion
 }
 
 
@@ -655,6 +881,7 @@ class TestThreadWithChilds extends Thread
 	 */
 	protected function process()
 	{
+		/** @noinspection PhpUnusedLocalVariableInspection */
 		$res = `echo 1`;
 		return $this->getParam(0);
 	}
