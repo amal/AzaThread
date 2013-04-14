@@ -1,6 +1,7 @@
 <?php
 
 namespace Aza\Components\Thread\Tests;
+use Aza\Components\CliBase\Base;
 use Aza\Components\Log\Logger;
 use Aza\Components\Socket\Socket;
 use Aza\Components\Thread\Thread;
@@ -402,12 +403,15 @@ class ThreadTest extends TestCase
 	#endregion
 
 
+
 	#region Auxiliary (helper) test methods
 
 	/**
 	 * Helper method for testing threads in asynchronous mode
 	 *
 	 * @param callable $callback
+	 *
+	 * @throws \Exception
 	 */
 	public function processAsyncTest($callback)
 	{
@@ -437,7 +441,14 @@ class ThreadTest extends TestCase
 
 				Thread::$ipcDataMode = $mode;
 
-				$callback();
+				try {
+					$callback();
+				} catch (\Exception $e) {
+					if ($base = Base::getEventBase(false)) {
+						$base->loopBreak();
+					}
+					throw $e;
+				}
 			}
 		}
 
@@ -529,6 +540,8 @@ class ThreadTest extends TestCase
 	 * Thread, events
 	 *
 	 * @param bool $debug
+	 *
+	 * @throws \Exception
 	 */
 	function processThreadEvent($debug = false)
 	{
@@ -546,11 +559,11 @@ class ThreadTest extends TestCase
 		$test = $this;
 		$arg = mt_rand(12, 987);
 		$last = 0;
-		$cb = function($event, $e_data, $e_arg) use ($arg, $test, &$last) {
+		$cb = function($event, $e_data, $e_arg) use ($arg, $test, &$last, $thread) {
 			/** @var $test TestCase */
 			$test->assertSame($arg, $e_arg);
 			$test->assertSame(TestThreadEvents::EV_PROCESS, $event);
-			$test->assertSame($last++, $e_data);
+			$test->assertEquals($last++, $e_data);
 		};
 		$thread->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
 
@@ -687,7 +700,7 @@ class ThreadTest extends TestCase
 				if (!isset($jobs[$threadId])) {
 					$jobs[$threadId] = 0;
 				}
-				$test->assertSame($jobs[$threadId]++, $e_data);
+				$test->assertEquals($jobs[$threadId]++, $e_data);
 			}
 		};
 		$pool->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
@@ -930,6 +943,9 @@ class TestThreadWork extends Thread
 class TestThreadEvents extends Thread
 {
 	const EV_PROCESS = 'process';
+
+	/** Job results wait timeout */
+	protected $timeoutMasterResultWait = 5;
 
 	/**
 	 * Main processing.

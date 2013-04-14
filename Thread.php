@@ -11,18 +11,10 @@ use Aza\Components\Socket\Socket;
 use Aza\Components\Thread\Exceptions\Exception;
 use Aza\Kernel\Core;
 
-// TODO: Try yo use ZeroMQ?
-// http://toys.lerdorf.com/archives/57-ZeroMQ-+-libevent-in-PHP.html
-// http://www.zeromq.org/
-// http://www.opennet.ru/opennews/art.shtml?num=27137
-// http://api.zeromq.org/2-1:zmq-ipc
-
-// TODO: External signal dispatcher
-
 /**
  * AzaThread (old name - CThread).
  * Powerfull thread emulation with forks and libevent.
- * Can work in synchronious mode without forks for compatibility.
+ * Can work in synchronous mode without forks for compatibility.
  *
  * @project Anizoptera CMF
  * @package system.thread
@@ -34,23 +26,23 @@ abstract class Thread
 	#region Constants
 
 	// Thread states
-	const STATE_TERM = 1;
-	const STATE_INIT = 2;
-	const STATE_WAIT = 3;
-	const STATE_WORK = 4;
+	const STATE_TERM = 1; // Terminating
+	const STATE_INIT = 2; // Initializing
+	const STATE_WAIT = 3; // Waiting (ready for job)
+	const STATE_WORK = 4; // Working
 
 	// Types of IPC packets
-	const P_STATE  = 0x01;
-	const P_JOB    = 0x02;
-	const P_EVENT  = 0x04;
-	const P_DATA   = 0x08;
-	const P_SERIAL = 0x10;
+	const P_STATE  = 0x01; // State change packet
+	const P_JOB    = 0x02; // New job packet
+	const P_EVENT  = 0x04; // Event (from child) or read confirmation (from parent)
+	const P_DATA   = 0x08; // Flag that packet has data
+	const P_SERIAL = 0x10; // Flag that data in packet is serialized
 
 	// Types of IPC data transfer modes
 	const IPC_IGBINARY  = 1; // Igbinary serialization   (~6625 jobs per second in tests with 8 threads)
 	const IPC_SERIALIZE = 2; // Native PHP serialization (~6501 jobs per second in tests with 8 threads)
 
-	// Timer names
+	// Timer names prefixes
 	const TIMER_BASE = 'thread:base:';
 	const TIMER_WAIT = 'thread:wait:';
 
@@ -202,7 +194,7 @@ abstract class Thread
 	 *
 	 * @var int
 	 */
-	private $state;
+	private $state = self::STATE_INIT;
 
 	/**
 	 * Whether waiting loop is enabled
@@ -287,27 +279,27 @@ abstract class Thread
 	#endregion
 
 
-	#region Settings. Overwrite on child class to set.
+	#region Settings. Overwrite in your thread class to customize.
 
 	/**
-	 * File for shared memory key generation.
-	 * Thread class file by default.
-	 */
-	protected $file;
-
-	/**
-	 * Whether the thread will wait for next tasks
+	 * Whether the thread will wait for next tasks.
+	 * Preforked threads are always multitask.
+	 *
+	 * @see prefork
 	 */
 	protected $multitask = true;
 
 	/**
-	 * Whether to listen for signals in master.
+	 * Whether to listen for all POSIX signals in master.
 	 * SIGCHLD is always listened.
 	 */
 	protected $listenMasterSignals = true;
 
 	/**
-	 * Perform pre-fork, to avoid wasting resources later
+	 * Perform pre-fork, to avoid wasting resources later.
+	 * Preforked threads are always multitask.
+	 *
+	 * @see multitask
 	 */
 	protected $prefork = true;
 
@@ -338,7 +330,7 @@ abstract class Thread
 	/**
 	 * Worker interval for master checks (in seconds).
 	 */
-	protected $intervalWorkerChecks = 15;
+	protected $intervalWorkerChecks = 5;
 
 	/**
 	 * Maximum worker pipe read size in bytes.
@@ -356,7 +348,7 @@ abstract class Thread
 	 * Whether to show debugging information
 	 * DO NOT USE IN PRODUCTION!
 	 *
-	 * @access protected
+	 * @internal
 	 */
 	public $debug = false;
 
@@ -416,25 +408,11 @@ abstract class Thread
 				);
 			}
 
-			// Master signals
-			if (!self::$eventsSignals) {
-				if ($this->listenMasterSignals) {
-					$this->registerEventSignals();
-				} else {
-					$signo = SIGCHLD;
-					$e = new Event();
-					$e->setSignal(
-						$signo,
-						array(get_called_class(), '_mEvCbSignal')
-					)->setBase($base)->add();
-					self::$eventsSignals[$signo] = $e;
-					$debug && $this->debug(
-						self::D_INIT . 'Master SIGCHLD event signal handler initialized'
-					);
-				}
-			}
+			// Listening for signals in master
+			self::$eventsSignals
+				|| $this->registerEventSignals($this->listenMasterSignals);
 
-			// Master timer
+			// Basic master timeout initialization
 			$timer_name = self::TIMER_BASE . $this->id;
 			$base->timerAdd(
 				$timer_name, 0,
@@ -453,8 +431,10 @@ abstract class Thread
 		// Preforking
 		if ($forks && $this->prefork) {
 			$debug && $this->debug(self::D_INFO . 'Preforking');
+
+			// Code for parent process
 			if ($this->forkThread()) {
-				// Parent
+				// Worker initialization timeout
 				if (($interval = $this->timeoutMasterInitWait) > 0) {
 					$timer_name = self::TIMER_BASE . $this->id;
 					$base->timerStart(
@@ -462,25 +442,37 @@ abstract class Thread
 						$interval,
 						self::STATE_INIT
 					);
+
 					$debug && $this->debug(
-						self::D_INFO . "Master timer ($timer_name) started for INIT ($interval sec)"
+						self::D_INFO . "Master timer ($timer_name) "
+						."started for INIT ($interval sec)"
 					);
 				}
-				$this->preforkWait && $this->wait();
-			} else {
-				// Child
+
+				// Wait for the preforking child
+				if ($this->preforkWait) {
+					$this->wait();
+				}
+			}
+
+			// Code for child process
+			else {
+				// Start main (infinite in theory) worker loop
 				$this->evWorkerLoop(true);
+
+				// Child ended it's work, terminating
 				$debug && $this->debug(
-					self::D_INFO . 'Preforking: end of loop, exiting'
+					self::D_INFO . 'Preforking: end of loop, terminating'
 				);
 				$this->shutdown();
 			}
 		} else {
+			// Immediately set waiting state (ready for job)
 			$this->setState(self::STATE_WAIT);
-		}
 
-		// On fork hook
-		$forks || $this->onFork();
+			// Call "on fork" hook for synchronous fallback mode
+			$forks || $this->onFork();
+		}
 	}
 
 
@@ -644,7 +636,7 @@ abstract class Thread
 		$this->isForked = true;
 		$pid = Base::fork();
 
-		// In parent
+		// Code for parent process
 		if ($pid) {
 			self::$threadsByPids[$pid] = $this->id;
 			$this->child_pid = $pid;
@@ -658,18 +650,19 @@ abstract class Thread
 					$this->pipes[0]->resource,
 					array($this, '_mEvCbRead'),
 					null,
+					// TODO: Add error callback?
 					function(){}
 				);
 				$ev->setBase(self::$base)->setPriority()->enable(EV_READ);
 				$debug && $this->debug(
-					self::D_INIT . 'Master event initialized'
+					self::D_INIT . 'Master pipe read event initialized'
 				);
 			}
 
 			return true;
 		}
 
-		// In child
+		// Code for child process
 		$this->isChild = true;
 		$this->pid =
 		$this->child_pid =
@@ -692,11 +685,12 @@ abstract class Thread
 				$this->pipes[1]->resource,
 				array($this, '_wEvCbRead'),
 				null,
+				// TODO: Add error callback?
 				function(){}
 			);
 			$ev->setBase(self::$base)->setPriority()->enable(EV_READ);
 			$debug && $this->debug(
-				self::D_INIT . 'Worker event initialized'
+				self::D_INIT . 'Worker pipe read event initialized'
 			);
 		}
 
@@ -708,6 +702,9 @@ abstract class Thread
 				self::D_INIT . "Child process name is changed to: $name"
 			);
 		}
+
+		// On fork hook
+		$this->onFork();
 
 		return false;
 	}
@@ -730,7 +727,9 @@ abstract class Thread
 			);
 		}
 
-		($debug = $this->debug) && $this->debug(self::D_INFO . 'Job start');
+		($debug = $this->debug) && $this->debug(
+			self::D_INFO . ' >>> Job start'
+		);
 		$this->setState(self::STATE_WORK);
 		$this->result  = null;
 		$this->success = false;
@@ -750,22 +749,28 @@ abstract class Thread
 			// Forking
 			else {
 				if ($this->forkThread()) {
-					// Parent
+					// Code for parent process
 					$this->startMasterWorkTimeout();
 				} else {
-					// Child
+					// Code for child process
 					$this->setParams($args);
 					$res = $this->process();
 					$this->setResult($res);
-					$this->multitask && $this->evWorkerLoop();
+
+					// Start main (infinite in theory) worker loop
+					$this->multitask
+						&& $this->evWorkerLoop();
+
 					$debug && $this->debug(
 						self::D_INFO . 'Simple end of work, exiting'
 					);
+					// Child ended it's work, terminating
 					$this->shutdown();
 				}
 			}
 		}
-		// Forkless compatibility
+
+		// Synchronous fallback mode
 		else {
 			$this->setParams($args);
 			$res = $this->process();
@@ -778,12 +783,13 @@ abstract class Thread
 		return $this;
 	}
 
+
 	/**
 	 * Prepares and starts worker event loop
 	 *
 	 * @param bool $setState Set waiting state
 	 *
-	 * @throws Exception
+	 * @throws Exception if called in parent
 	 */
 	private function evWorkerLoop($setState = false)
 	{
@@ -793,7 +799,7 @@ abstract class Thread
 
 		if (!$this->isChild) {
 			throw new Exception(
-				'Can\'t start child loop in parent'
+				"Can't start child loop in parent"
 			);
 		}
 
@@ -802,9 +808,9 @@ abstract class Thread
 		$base = self::$base;
 
 		// Worker timer to check master process
-		$timer = self::TIMER_BASE;
+		$timer   = self::TIMER_BASE;
 		$timerCb = array($this, '_wEvCbTimer');
-		($timeout = $this->intervalWorkerChecks) > 0 || $timeout = 15;
+		($timeout = $this->intervalWorkerChecks) > 0 || $timeout = 5;
 		$base->timerAdd($timer, $timeout, $timerCb);
 		$this->eventsTimers[] = $timer;
 		$debug && $this->debug(
@@ -831,17 +837,30 @@ abstract class Thread
 	}
 
 
+	/**
+	 * Returns thread event base
+	 *
+	 * @return EventBase|null
+	 */
+	public function getEventBase()
+	{
+		return self::$base;
+	}
+
+
 
 	#region Methods for overriding!
 
 	/**
-	 * Hook called after the thread initialization,
-	 * but before forking!
+	 * Hook called after thread initialization, but before forking!
 	 */
 	protected function onLoad() {}
 
 	/**
-	 * Hook called after the thread forking (in child process)
+	 * Hook called after thread forking (only in child process).
+	 *
+	 * It's already called after initialization
+	 * in synchronous fallback mode
 	 */
 	protected function onFork() {}
 
@@ -976,9 +995,13 @@ abstract class Thread
 				$this->listeners[$event] = array();
 			}
 			$this->listeners[$event][] = array($listener, $arg);
-			$this->debug(
-				self::D_INFO . "New listener binded on event [$event]"
-			);
+			if ($this->debug) {
+				is_callable($listener, true, $callable_name);
+				$this->debug(
+					self::D_INFO . "New external listener binded on "
+					."thread event \"$event\" - [$callable_name]"
+				);
+			}
 		}
 	}
 
@@ -988,12 +1011,14 @@ abstract class Thread
 	 * @see bind
 	 *
 	 * @param string $event An event name
-	 * @param mixed	 $data	Event data for callback
+	 * @param mixed  $data Event data for callback
+	 *
+	 * @throws \Exception rethrows catched exceptions
 	 */
 	public function trigger($event, $data = null)
 	{
 		($debug = $this->debug) && $this->debug(
-			self::D_INFO . "Triggering event [$event]"
+			self::D_INFO . "Triggering event \"$event\""
 		);
 
 		// Child
@@ -1011,21 +1036,29 @@ abstract class Thread
 		}
 		// Parent
 		else {
-			if (!empty($this->listeners[$event])) {
-				/** @var $cb callback */
-				foreach ($this->listeners[$event] as $l) {
-					list($cb, $arg) = $l;
-					if ($cb instanceof \Closure) {
-						$cb($event, $data, $arg);
-					} else {
-						call_user_func(
-							$cb, $event, $data, $arg
-						);
+			try {
+				if (!empty($this->listeners[$event])) {
+					/** @var $cb callback */
+					foreach ($this->listeners[$event] as $l) {
+						list($cb, $arg) = $l;
+						if ($cb instanceof \Closure) {
+							$cb($event, $data, $arg);
+						} else {
+							call_user_func(
+								$cb, $event, $data, $arg
+							);
+						}
 					}
 				}
-			}
-			if ($pool = $this->pool) {
-				$pool->trigger($event, $this->id, $data);
+				if ($pool = $this->pool) {
+					$pool->trigger($event, $this->id, $data);
+				}
+			} catch (\Exception $e) {
+				// Break event loop to avoid freezes and other bugs
+				if ($base = self::$base) {
+					self::$base->loopBreak();
+				}
+				throw $e;
 			}
 		}
 	}
@@ -1285,7 +1318,7 @@ abstract class Thread
 	 * @see evWorkerLoop
 	 * @see EventBuffer::setCallback
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @throws Exception
 	 *
@@ -1362,7 +1395,7 @@ abstract class Thread
 	 * @see evWorkerLoop
 	 * @see EventBase::timerAdd
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @param string $name
 	 */
@@ -1398,7 +1431,7 @@ abstract class Thread
 	 * @see __construct
 	 * @see EventBuffer::setCallback
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @param resource $buf  Buffered event
 	 * @param array    $args
@@ -1496,7 +1529,7 @@ abstract class Thread
 	 * @see __construct
 	 * @see EventBase::timerAdd
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @param string $name      Timer name
 	 * @param mixed  $arg       Additional timer argument
@@ -1668,6 +1701,7 @@ abstract class Thread
 				$curPacket['value'] =
 				$curPacket['data'] = '';
 				$buffer = substr($buffer, 7);
+
 				$debug && $this->debug(
 					self::D_IPC . "    Packet started [{$curPacket['packet']}]; "
 					.($curPacket['dataLength']-$curPacket['valueLength'])."b data;"
@@ -1903,21 +1937,43 @@ abstract class Thread
 
 
 	/**
-	 * Register signals.
+	 * Registers event handlers for all POSIX signals
+	 *
+	 * @param bool $allSignals [optional] <p>
+	 * Whether to register handlers for all signals
+	 * or only for SIGCHLD (we need it to know if
+	 * child is dead).
+	 * </p>
+	 *
+	 * @throws Exception if signal events are already registered
 	 */
-	private function registerEventSignals()
+	private function registerEventSignals($allSignals = true)
 	{
 		if (self::$eventsSignals) {
 			throw new Exception(
 				'Signal events are already registered'
 			);
 		}
-		$base = self::$base;
-		$i = 0;
+
+		/**
+		 * Basically we register event handlers for all POSIX signals.
+		 * In other case we need at least SIGCHLD handler to
+		 * know if child is dead.
+		 */
+		$signals = $allSignals ? Base::$signals : array(SIGCHLD);
+
+		/**
+		 * Different callbacks for parent and child process
+		 */
 		$cb = $this->isChild
 				? array($this, '_evCbSignal')
 				: array(get_called_class(), '_mEvCbSignal');
-		foreach (Base::$signals as $signo => $name) {
+
+		$base = self::$base;
+		$i    = 0;
+
+		foreach ($signals as $signo => $name) {
+			// Ignore SIGKILL and SIGSTOP - we can not handle them.
 			if ($signo === SIGKILL || $signo === SIGSTOP) {
 				continue;
 			}
@@ -1928,8 +1984,10 @@ abstract class Thread
 			self::$eventsSignals[$signo] = $ev;
 			$i++;
 		}
+
+		/** @noinspection PhpUndefinedVariableInspection */
 		$this->debug(
-			self::D_INIT . "Signals event handlers registered ($i)"
+			self::D_INIT . "Signals event handlers registered ($i, last - $name)"
 		);
 	}
 
@@ -1937,7 +1995,7 @@ abstract class Thread
 	/**
 	 * Called when a signal caught through libevent.
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @param null  $fd
 	 * @param int   $events
@@ -1989,7 +2047,7 @@ abstract class Thread
 	/**
 	 * Called when a signal caught in master through libevent.
 	 *
-	 * @access private
+	 * @internal
 	 *
 	 * @param null  $fd
 	 * @param int   $events
@@ -2154,7 +2212,7 @@ abstract class Thread
 			$this->debug(self::D_INFO . 'Child exit');
 			$this->cleanup();
 
-			// TODO: Event dispatcher?
+			// TODO: Event dispatcher call for shutdown?
 			class_exists('Aza\Kernel\Core', false)
 					&& Core::stopApplication(true);
 

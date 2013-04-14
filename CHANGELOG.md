@@ -3,6 +3,13 @@ CHANGELOG
 
 ## Version 1.1 (work in progress)
 
+14.04.2013
+- **FIXED:** Fixed issue with exceptions in events triggering (amal)
+
+13.04.2013
+- **FIXED:** `Thread::onFork` hook is now properly called in child after forking (amal)
+- **MINOR:** Small thread improvements with code cleanup and refactoring (amal)
+- **MINOR:** Unit tests structure improvements (amal)
 
 09.04.2013
 - **IMPROVED:** `Thread::forkThread` method visibility changed to protected (Issue #3, amal)
