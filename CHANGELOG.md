@@ -3,6 +3,9 @@ CHANGELOG
 
 ## Version 1.1 (work in progress)
 
+17.04.2013
+- **MINOR:** `@return $this` in PhpDocs (amal)
+
 14.04.2013
 - **FIXED:** Fixed issue with exceptions in events triggering (amal)
 

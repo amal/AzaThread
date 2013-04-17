@@ -712,7 +712,7 @@ abstract class Thread
 	/**
 	 * Starts processing
 	 *
-	 * @return Thread
+	 * @return $this
 	 *
 	 * @throws Exception
 	 */
@@ -885,7 +885,7 @@ abstract class Thread
 	 *
 	 * @throws Exception
 	 *
-	 * @return Thread
+	 * @return $this
 	 */
 	public function wait()
 	{
@@ -986,6 +986,8 @@ abstract class Thread
 	 * @param mixed $arg <p>
 	 * Additional argument for callback.
 	 * </p>
+	 *
+	 * @return $this
 	 */
 	public function bind($event, $listener, $arg = null)
 	{
@@ -1003,6 +1005,7 @@ abstract class Thread
 				);
 			}
 		}
+		return $this;
 	}
 
 	/**
