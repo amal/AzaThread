@@ -504,6 +504,9 @@ abstract class Thread
 		$class    = get_called_class();
 		$isMaster = !$this->isChild;
 
+		// Event listeners
+		$this->listeners = array();
+
 		// Threads pool
 		if ($pool = &$this->pool) {
 			unset(
@@ -678,6 +681,9 @@ abstract class Thread
 
 		// Cleanup parent events
 		$this->eventsTimers = self::$eventsSignals = array();
+
+		// Cleanup event listeners (needed only in parent)
+		$this->listeners = array();
 
 		// Child event
 		if (!$this->childEvent) {

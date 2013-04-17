@@ -4,6 +4,7 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 17.04.2013
+- **MINOR:** Better event listeners cleanup (amal)
 - **MINOR:** `@return $this` in PhpDocs (amal)
 
 14.04.2013
