@@ -173,6 +173,7 @@ class ThreadPool
 		if (($count = &$this->threadsCount)
 		    < ($tMax = $this->maxThreads)
 		) {
+			$debug = $this->debug;
 			do {
 				/** @var $thread Thread */
 				$thread = $this->tName;
@@ -180,7 +181,7 @@ class ThreadPool
 				$id = $thread->getId();
 				$this->threads[$id] = $thread;
 				$count++;
-				$this->debug("Thread #$id created");
+				$debug && $this->debug("Thread #$id created");
 			} while ($count < $tMax);
 		}
 	}
@@ -193,10 +194,14 @@ class ThreadPool
 	 */
 	public function run()
 	{
-		$this->createAllThreads();
+		if ($this->threadsCount < $this->maxThreads) {
+			$this->createAllThreads();
+		}
 		if ($this->hasWaiting()) {
 			$threadId = reset($this->waiting);
 			$thread = $this->threads[$threadId];
+
+			// Use strict call for speedup if number of arguments is not too big
 			$args = func_get_args();
 			if (($count = count($args)) === 0) {
 				$thread->run();
@@ -210,7 +215,13 @@ class ThreadPool
 				call_user_func_array(array($thread, 'run'), $args);
 			}
 			$this->waitNumber--;
-			$this->debug("Thread #$threadId started");
+
+			// @codeCoverageIgnoreStart
+			$this->debug && $this->debug(
+				"Thread #$threadId started"
+			);
+			// @codeCoverageIgnoreEnd
+
 			return $threadId;
 		}
 		return false;
@@ -236,14 +247,19 @@ class ThreadPool
 			if ($this->initializing) {
 				$w += $this->initializing;
 			}
+			// @codeCoverageIgnoreStart
 			$this->debug && $this->debug(
 				'Waiting for threads: ' . join(', ', $w)
 			);
+			// @codeCoverageIgnoreEnd
 			Thread::waitThreads($w);
 		} else {
+			// Should not be called
+			// @codeCoverageIgnoreStart
 			throw new Exception(
 				'Nothing to wait in pool'
 			);
+			// @codeCoverageIgnoreEnd
 		}
 		return $this->getResults($failed);
 	}
@@ -289,7 +305,7 @@ class ThreadPool
 	 *
 	 * @return array
 	 */
-	protected function getState()
+	public function getState()
 	{
 		$state = array();
 		foreach ($this->threads as $threadId => $thread) {
@@ -337,8 +353,19 @@ class ThreadPool
 	 */
 	public function trigger($event, $threadId, $data = null)
 	{
-		$this->debug("Triggering event [$event]");
+		// @codeCoverageIgnoreStart
+		($debug = $this->debug) && $this->debug(
+			"Triggering event \"$event\" on pool"
+		);
+		// @codeCoverageIgnoreEnd
+
 		if (!empty($this->listeners[$event])) {
+			// @codeCoverageIgnoreStart
+			$debug && $this->debug(
+				"Pool has event listeners. Notify them..."
+			);
+			// @codeCoverageIgnoreEnd
+
 			/** @var $cb callback */
 			foreach ($this->listeners[$event] as $l) {
 				list($cb, $arg) = $l;
@@ -391,9 +418,14 @@ class ThreadPool
 		if (class_exists('Aza\Kernel\Core', false)
 		    && $app = Core::$app
 		) {
+			// @codeCoverageIgnoreStart
+			// TODO: Event dispatcher call for debug message?
 			$app->msg($message, Logger::LVL_DEBUG);
 		} else {
-			echo strip_tags($message), PHP_EOL;
+			// @codeCoverageIgnoreEnd
+			echo preg_replace(
+				'~<(?:/?[a-z][a-z0-9_=;-]+|/)>~Si', '', $message
+			), PHP_EOL;
 			@ob_flush();
 			@flush();
 		}

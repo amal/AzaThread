@@ -1,7 +1,8 @@
-AzaThread (old name - CThread)
-==============================
+AzaThread
+=========
 
 Anizoptera CMF simple and powerful threads emulation component for PHP (based on forks).
+Old name - CThread.
 
 https://github.com/Anizoptera/AzaThread
 

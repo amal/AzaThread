@@ -3,6 +3,16 @@ CHANGELOG
 
 ## Version 1.1 (work in progress)
 
+
+21.04.2013
+- **MINOR:** Many new tests, better feature and code coverage (amal)
+- **MINOR:** Many small optimizations, improvements and code cleanup (amal)
+- **FEATURE:** Optional arguments mapping (amal)
+- **FIXED:** Support for several different threads used at one time not in pool (amal)
+- **FIXED:** Worker interval to check parent process did not restarted after first iteration (amal)
+- **FIXED:** Worker job waiting timeout missed the first iteration (amal)
+- **FIXED:** Tags stripping for debug messages could corrupt them (`strip_tags` replaced with regex) (amal)
+
 17.04.2013
 - **MINOR:** Better event listeners cleanup (amal)
 - **MINOR:** `@return $this` in PhpDocs (amal)
