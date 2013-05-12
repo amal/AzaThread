@@ -4,6 +4,9 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+12.05.2013
+- **FIXED:** Inconsistent behaviour with `multitask=false` removed (Issue #6, amal)
+
 11.05.2013
 - **IMPROVED:** Full code coverage (amal)
 - **IMPROVED:** Speedup in IPC. Overall, IPC accelerated by 15-50% compared with the v1.0 release (amal)

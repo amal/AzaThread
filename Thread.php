@@ -555,6 +555,9 @@ abstract class Thread
 
 		// Preforking
 		if ($forks && $this->prefork) {
+			// Preforked threads are always multitask.
+			$this->multitask = true;
+
 			$debug && $this->debug(self::D_INFO . 'Preforking...');
 
 			// Code for parent process
@@ -1807,18 +1810,26 @@ abstract class Thread
 
 		// Change state (in parent)
 		else {
-			$wait = (self::STATE_WAIT === $state);
 			$threadId = $this->id;
 
 			// Waiting
-			if ($wait) {
-				// Should not be called
-				// @codeCoverageIgnoreStart
-				if ($this->jobStarted && !$this->success && !$this->lastErrorCode) {
-					$this->lastErrorCode = self::ERR_OTHER;
-					$this->lastErrorMsg  = 'Worker stopped';
+			if ($wait = (self::STATE_WAIT === $state)) {
+				if ($this->jobStarted) {
+					// Should not be called
+					// @codeCoverageIgnoreStart
+					if (!$this->success && !$this->lastErrorCode) {
+						$this->lastErrorCode = self::ERR_OTHER;
+						$this->lastErrorMsg  = 'Worker stopped';
+					}
+					// @codeCoverageIgnoreEnd
+
+					$this->jobStarted = null;
+
+					// Mark thread as stopped and clean resources
+					// if not multitask
+					$this->multitask
+						|| $this->stopWorker();
 				}
-				// @codeCoverageIgnoreEnd
 
 				// Forked thread and event loop
 				if (self::$useForks) {
@@ -1868,8 +1879,7 @@ abstract class Thread
 			}
 
 			// Pool processing
-			$pool = $this->pool;
-			if ($pool) {
+			if ($pool = $this->pool) {
 				// Waiting
 				if ($wait) {
 					$pool->markThreadWaiting(
@@ -2968,9 +2978,10 @@ abstract class Thread
 	 */
 	protected function stopWorker($wait = false, $signo = SIGTERM)
 	{
+		$debug  = $this->debug;
+		$result = false;
+
 		// Stop worker
-		$debug = $this->debug;
-		$res   = false;
 		if ($this->isForked) {
 			if ($this->isAlive()) {
 				// @codeCoverageIgnoreStart
@@ -2983,7 +2994,9 @@ abstract class Thread
 					);
 				}
 				// @codeCoverageIgnoreEnd
+
 				$this->sendSignalToChild($signo);
+
 				// @codeCoverageIgnoreStart
 				if ($wait) {
 					$debug && $this->debug(
@@ -3018,7 +3031,7 @@ abstract class Thread
 					}
 				}
 				// @codeCoverageIgnoreEnd
-				$res = true;
+				$result = true;
 			}
 			// @codeCoverageIgnoreStart
 			else if ($debug) {
@@ -3054,7 +3067,7 @@ abstract class Thread
 			$this->setState(self::STATE_WAIT);
 		}
 
-		return $res;
+		return $result;
 	}
 
 	/**

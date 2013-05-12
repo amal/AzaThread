@@ -181,7 +181,7 @@ class ThreadTest extends TestCase
 
 		$this->assertSame($count+3, $this->getCount());
 		$this->assertSame(Thread::STATE_WAIT, $thread->getState());
-		$this->assertTrue($thread->getSuccess());
+		$this->assertTrue($thread->getSuccess(), 'Job failure');
 
 		$thread->cleanup();
 	}
@@ -208,6 +208,19 @@ class ThreadTest extends TestCase
 	{
 		Thread::$useForks = false;
 		$this->processThreadArgumentsMapping(false);
+	}
+
+	/**
+	 * Multitask disabled thread test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 * @ticket GitHub Anizoptera/AzaThread/#6
+	 */
+	public function testSyncThreadOnetask()
+	{
+		Thread::$useForks = false;
+		$this->processThread(false, true, false, true);
 	}
 
 
@@ -326,6 +339,19 @@ class ThreadTest extends TestCase
 	{
 		Thread::$useForks = false;
 		$this->processPoolErrorableExternal(false);
+	}
+
+	/**
+	 * Thread pool test with multitask disabled (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 * @ticket GitHub Anizoptera/AzaThread/#6
+	 */
+	public function testSyncPoolOnetask()
+	{
+		Thread::$useForks = false;
+		$this->processPool(false, false, true, true);
 	}
 
 
@@ -484,6 +510,25 @@ class ThreadTest extends TestCase
 		}, true);
 	}
 
+	/**
+	 * Multitask disabled thread test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 * @ticket GitHub Anizoptera/AzaThread/#6
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadOnetask()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread(false, true, false, true);
+		}, true);
+	}
+
 
 	/**
 	 * Simple thread pool test
@@ -628,6 +673,25 @@ class ThreadTest extends TestCase
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processPoolErrorableExternal(false);
 		});
+	}
+
+	/**
+	 * Thread pool test with multitask disabled
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group pool
+	 * @ticket GitHub Anizoptera/AzaThread/#6
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testPoolOnetask()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool(false, false, true, true);
+		}, true);
 	}
 
 
@@ -1054,8 +1118,9 @@ class ThreadTest extends TestCase
 	 * @param bool $debug
 	 * @param bool $bigResult
 	 * @param bool $withChild
+	 * @param bool $oneTask
 	 */
-	function processThread($debug = false, $bigResult = false, $withChild = false)
+	function processThread($debug = false, $bigResult = false, $withChild = false, $oneTask = false)
 	{
 		$num = 10;
 
@@ -1066,9 +1131,13 @@ class ThreadTest extends TestCase
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = $withChild
-				? new TestThreadWithChilds(null, null, $debug)
-				: new TestThreadReturnFirstArgument(null, null, $debug);
+		if ($oneTask) {
+			$thread = new TestThreadOneTask(null, null, $debug);
+		} else {
+			$thread = $withChild
+					? new TestThreadWithChilds(null, null, $debug)
+					: new TestThreadReturnFirstArgument(null, null, $debug);
+		}
 
 		if ($async) {
 			$this->assertNotEmpty($thread->getEventLoop());
@@ -1085,7 +1154,11 @@ class ThreadTest extends TestCase
 		$thread->wait();
 
 		if ($async) {
-			$this->assertTrue($thread->getIsForked());
+			if ($oneTask) {
+				$this->assertFalse($thread->getIsForked());
+			} else {
+				$this->assertTrue($thread->getIsForked());
+			}
 		}
 		$this->assertFalse($thread->getIsChild());
 		$this->assertSame(Thread::STATE_WAIT, $thread->getState());
@@ -1100,7 +1173,7 @@ class ThreadTest extends TestCase
 			$value = $bigResult ? str_repeat($i, 100000) : $i;
 			$thread->run($value)->wait();
 			$this->assertSame(Thread::STATE_WAIT, $thread->getState());
-			$this->assertTrue($thread->getSuccess());
+			$this->assertTrue($thread->getSuccess(), 'Job failure');
 			$this->assertEquals($value, $thread->getResult());
 			$this->assertEmpty(
 				$thread->getLastErrorCode(),
@@ -1214,7 +1287,7 @@ class ThreadTest extends TestCase
 			} else {
 				$thread->run($events)->wait();
 			}
-			$this->assertTrue($thread->getSuccess());
+			$this->assertTrue($thread->getSuccess(), 'Job failure');
 		}
 
 		$this->assertSame($events, $last);
@@ -1265,10 +1338,11 @@ class ThreadTest extends TestCase
 	 * @param bool $debug
 	 * @param bool $bigResult
 	 * @param bool $withChild
+	 * @param bool $oneTask
 	 *
 	 * @throws Exception
 	 */
-	function processPool($debug = false, $bigResult = false, $withChild = false)
+	function processPool($debug = false, $bigResult = false, $withChild = false, $oneTask = false)
 	{
 		$threads       = 2;
 		$targetThreads = $threads+2;
@@ -1280,9 +1354,14 @@ class ThreadTest extends TestCase
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = $withChild
-				? 'TestThreadWithChilds'
-				: 'TestThreadReturnFirstArgument';
+
+		if ($oneTask) {
+			$thread = 'TestThreadOneTask';
+		} else {
+			$thread = $withChild
+					? 'TestThreadWithChilds'
+					: 'TestThreadReturnFirstArgument';
+		}
 		$thread = __NAMESPACE__ . '\\' . $thread;
 
 		$name = 'example';
@@ -1886,7 +1965,7 @@ class TestThreadArgumentsMapping extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	protected $timeoutMasterResultWait = 0.5;
+	protected $timeoutMasterResultWait = 2;
 
 	/**
 	 * {@inheritdoc}
@@ -1915,7 +1994,7 @@ class TestThreadReturnFirstArgument extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	protected $timeoutMasterResultWait = 2;
+	protected $timeoutMasterResultWait = 5;
 
 	/**
 	 * {@inheritdoc}
@@ -1934,6 +2013,22 @@ class TestThreadReturnFirstArgument extends Thread
 		}
 		return $param;
 	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadOneTask extends TestThreadReturnFirstArgument
+{
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $multitask = false;
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $prefork = false;
 }
 
 /**
@@ -1979,11 +2074,6 @@ class TestThreadReturnFirstArgumentWithErrors extends TestThreadReturnFirstArgum
 class TestThreadWithChilds extends TestThreadReturnFirstArgument
 {
 	/**
-	 * {@inheritdoc}
-	 */
-	protected $timeoutMasterResultWait = 3;
-
-	/**
 	 * Enable prefork waiting to test it
 	 */
 	protected $preforkWait = true;
@@ -2009,7 +2099,7 @@ class TestThreadEvents extends TestThreadReturnFirstArgument
 	/**
 	 * {@inheritdoc}
 	 */
-	protected $timeoutMasterResultWait = 1;
+	protected $timeoutMasterResultWait = 2;
 
 	/**
 	 * {@inheritdoc}
