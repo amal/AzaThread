@@ -119,6 +119,18 @@ class ThreadTest extends TestCase
 	}
 
 	/**
+	 * Additional thread test
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThread2()
+	{
+		Thread::$useForks = false;
+		$this->processThread2(false);
+	}
+
+	/**
 	 * Thread test with big data (sync mode)
 	 *
 	 * @author amal
@@ -399,6 +411,24 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false);
+		}, true);
+	}
+
+	/**
+	 * Additional thread test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThread2()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThread2(false);
 		}, true);
 	}
 
@@ -1184,9 +1214,68 @@ class ThreadTest extends TestCase
 
 		$thread->cleanup();
 		$this->assertTrue($thread->getIsCleaning());
-		$this->assertEmpty($thread->getEventLoop());
 		$this->assertSame('TERM', $thread->getStateName());
 		$this->assertSame('INIT', $thread->getStateName(Thread::STATE_INIT));
+	}
+
+	/**
+	 * Thread 2
+	 *
+	 * @param bool $debug
+	 */
+	function processThread2($debug = false)
+	{
+		$async = Thread::$useForks;
+		if ($debug) {
+			echo '-------------------------', PHP_EOL,
+			"Additional thread test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
+			'-------------------------', PHP_EOL;
+		}
+
+
+		// Empty argument
+		$thread = new TestThreadReturnAllArguments(
+			null, null, $debug
+		);
+		$thread->wait()->run(null)->wait();
+		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertSame(array(null), $thread->getResult());
+		$this->assertEmpty(
+			$thread->getLastErrorCode(),
+			$thread->getLastErrorMsg()
+		);
+		$this->assertEmpty($thread->getLastErrorMsg());
+		$thread->cleanup();
+
+
+		// Empty result
+		$thread = new TestThreadDoNothing(
+			null, null, $debug
+		);
+		$thread->wait()->run()->wait();
+		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertSame(null, $thread->getResult());
+		$this->assertEmpty(
+			$thread->getLastErrorCode(),
+			$thread->getLastErrorMsg()
+		);
+		$this->assertEmpty($thread->getLastErrorMsg());
+		$thread->cleanup();
+
+
+		// Hooks
+		$thread = new TestThreadHooks(
+			null, null, $debug
+		);
+		$this->assertSame(1, $thread->onLoadHookCalls);
+		$this->assertSame(
+			$async ? 0 : 1,
+			$thread->onForkHookCalls
+		);
+		$this->assertSame(0, $thread->onShutdownHookCalls);
+		$thread->wait()->run()->wait();
+		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertSame(array(1, 1, 0), $thread->getResult());
 	}
 
 	/**
@@ -1321,9 +1410,12 @@ class ThreadTest extends TestCase
 		$thread->wait();
 
 		for ($i = 0; $i < $num; $i++) {
-			$thread->run(123, 456, 789)->wait();
-			$this->assertEquals(
-				array(123, 456, 789),
+			$a = mt_rand(99, 999);
+			$b = mt_rand(59, 999);
+			$c = mt_rand(13, 999);
+			$thread->run($a, $b, $c)->wait();
+			$this->assertSame(
+				array($a, $b, $c),
 				$thread->getResult()
 			);
 		}
@@ -1406,7 +1498,7 @@ class ThreadTest extends TestCase
 		$maxI = (int)ceil($num * 1.5);
 		$worked = array();
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = mt_rand(1, 999);
 				if ($bigResult) {
 					$arg = str_repeat($arg, 1000000);
@@ -1479,6 +1571,8 @@ class ThreadTest extends TestCase
 			'-------------------------', PHP_EOL;
 		}
 
+
+		// ReturnAllArguments
 		$threads = 2;
 		$thread  = __NAMESPACE__ . '\TestThreadReturnAllArguments';
 		$pName = 'ReturnAllArguments';
@@ -1509,24 +1603,25 @@ class ThreadTest extends TestCase
 			$this->assertSame(2, $catched);
 		}
 
-		$data   = array(
+		$data = array(
 			array(),
 			array(1),
 			array(1, 2),
 			array(1, 2, 3),
 			array(1, 2, 3, 4),
 			array(1, 2, 3, 4, 5),
+			array(null),
+			array(null, null),
 		);
+
 		$worked = $jobs = array();
 		$i      = 0;
 		$left   = $num = count($data);
 		$maxI   = ceil($num * 1.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
-				$args = array_shift($data);
-				if (!$threadId = call_user_func_array(array($pool, 'run'), $args)) {
-					throw new Exception('Pool slots error');
-				}
+			while ($left > 0 && $pool->hasWaiting()) {
+				$args     = array_shift($data);
+				$threadId = call_user_func_array(array($pool, 'run'), $args);
 
 				$this->assertNotEmpty($threadId);
 				$this->assertTrue(
@@ -1543,21 +1638,50 @@ class ThreadTest extends TestCase
 			if ($results) {
 				foreach ($results as $threadId => $res) {
 					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
-					$this->assertEquals($jobs[$threadId], $res, "Thread #$threadId");
+					$this->assertSame($jobs[$threadId], $res, "Thread #$threadId");
 					unset($jobs[$threadId]);
 					$num--;
 				}
 			}
 			$i++;
 		} while ($num > 0 && $i < $maxI);
-
 		$this->assertSame(0, $num, 'All jobs must be done');
+		$pool->cleanup();
 
-		$this->assertSame(
-			$pool->getThreadsCount(), count($worked),
-			'Worked threads count is not equals to real threads count'
+
+		// TestThreadDoNothing
+		$threads = 2;
+		$thread  = __NAMESPACE__ . '\TestThreadDoNothing';
+		$pool = new ThreadPool(
+			$thread, $threads, null, null, $debug
 		);
 
+		$i    = 0;
+		$left = $num = 1;
+		$maxI = 6;
+		do {
+			while ($left > 0 && $pool->hasWaiting()) {
+				$threadId = $pool->run();
+				$jobs[$threadId]   = null;
+				$worked[$threadId] = true;
+				$left--;
+			}
+			$results = $pool->wait($failed);
+			$this->assertEmpty($failed, 'Failed results: ' . print_r($failed, true));
+			if ($results) {
+				foreach ($results as $threadId => $res) {
+					$this->assertTrue(
+						array_key_exists($threadId, $jobs), "Thread #$threadId"
+					);
+					$this->assertSame($jobs[$threadId], $res, "Thread #$threadId");
+					unset($jobs[$threadId]);
+					$num--;
+					break 2;
+				}
+			}
+			$i++;
+		} while ($i < $maxI);
+		$this->assertSame(0, $num, 'All jobs must be done');
 		$pool->cleanup();
 	}
 
@@ -1610,7 +1734,7 @@ class ThreadTest extends TestCase
 		$left = $num;
 		$maxI = ceil($num * 1.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$threadId = $pool->run($events);
 				$this->assertNotEmpty($threadId);
 				if ($async) {
@@ -1670,7 +1794,7 @@ class ThreadTest extends TestCase
 		$left = $num;
 		$maxI = ceil($num * 2.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = mt_rand(1000000, 200000000);
 				$threadId = $pool->run($arg, $j);
 
@@ -1749,7 +1873,7 @@ class ThreadTest extends TestCase
 		$left = $num;
 		$maxI = ceil($num * 2.5);
 		do {
-			while ($pool->hasWaiting() && $left > 0) {
+			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = str_repeat(
 					mt_rand(100, 999),
 					$argDebug ? 3 : 10000
@@ -2029,6 +2153,70 @@ class TestThreadOneTask extends TestThreadReturnFirstArgument
 	 * {@inheritdoc}
 	 */
 	protected $prefork = false;
+}
+
+/**
+ * Test thread
+ */
+class TestThreadDoNothing extends TestThreadReturnFirstArgument
+{
+	/**
+	 * {@inheritdoc}
+	 */
+	function process() {}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadHooks extends TestThreadReturnFirstArgument
+{
+	/** @var int */
+	public $onLoadHookCalls = 0;
+
+	/** @var int */
+	public $onForkHookCalls = 0;
+
+	/** @var int */
+	public $onShutdownHookCalls = 0;
+
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function onLoad()
+	{
+		$this->onLoadHookCalls++;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function onFork()
+	{
+		$this->onForkHookCalls++;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function onShutdown()
+	{
+		$this->onShutdownHookCalls++;
+	}
+
+
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
+	{
+		return array(
+			$this->onLoadHookCalls,
+			$this->onForkHookCalls,
+			$this->onShutdownHookCalls
+		);
+	}
 }
 
 /**

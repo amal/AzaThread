@@ -4,6 +4,9 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+13.05.2013
+- **MINOR:** Additional tests (empty argument/result, thread hooks) (amal)
+
 12.05.2013
 - **FIXED:** Inconsistent behaviour with `multitask=false` removed (Issue #6, amal)
 

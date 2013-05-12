@@ -887,12 +887,12 @@ abstract class Thread
 			// Signal events
 			$slotName = (int)$isMaster;
 			if (!$isMaster || !self::$threads) {
+				// @codeCoverageIgnoreStart
 				if (!empty(self::$eventsSignals[$slotName = (int)$isMaster])) {
 					/** @var Event $ev */
 					foreach (self::$eventsSignals[$slotName] as $ev) {
 						$ev->free();
 					}
-					// @codeCoverageIgnoreStart
 					$debug && $this->debug(
 						self::D_CLEAN . 'Signal events freed ('
 						. ($isMaster ? 'last master' : 'child')
@@ -3049,7 +3049,9 @@ abstract class Thread
 
 		// Cleanup. Buffered event can be damaged after child death
 		if ($e = $this->masterEvent) {
-			$e->readAllClean();
+			try {
+				$e->readAllClean();
+			} catch (\Exception $ex) {}
 			$e->free();
 
 			// @codeCoverageIgnoreStart
