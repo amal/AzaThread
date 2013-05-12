@@ -12,11 +12,14 @@ use Aza\Components\Thread\Exceptions\Exception;
 use Aza\Kernel\Core;
 
 /**
- * AzaThread.
+ * Base class for AzaThread instance.
  * Powerfull thread emulation with forks and libevent.
  * Can work in synchronous mode without forks for compatibility.
  *
  * Old name - CThread.
+ *
+ * Inherit your "thread" from this class and implement
+ * {@link process} method for basic usage.
  *
  * @project Anizoptera CMF
  * @package system.thread
@@ -29,32 +32,81 @@ abstract class Thread
 {
 	#region Constants
 
-	// Thread states
-	const STATE_TERM = 1; // Terminating
-	const STATE_INIT = 2; // Initializing
-	const STATE_WAIT = 3; // Waiting (ready for job, for example)
-	const STATE_WORK = 4; // Working
+	// Error codes
 
-	// Types of IPC packets
+	/**
+	 * Abnormal errors. See error message for details.
+	 */
+	const ERR_OTHER = 0x01;
+
+	/**
+	 * Job is not done because of child process sudden death
+	 */
+	const ERR_DEATH = 0x02;
+
+	/**
+	 * Job is not done because of exceeding of maximum timeout
+	 * for master to wait for the job results
+	 */
+	const ERR_TIMEOUT_RESULT = 0x04;
+
+	/**
+	 * Job is not done because of exceeding of maximum timeout
+	 * for master to wait for worker initialization (prefork)
+	 */
+	const ERR_TIMEOUT_INIT = 0x08;
+
+
+	// Types of IPC data transfer modes
+
+	/**
+	 * Igbinary serialization (~6625 jobs per second in tests)
+	 */
+	const IPC_IGBINARY  = 1;
+
+	/**
+	 * Native PHP serialization (~6501 jobs per second in tests)
+	 */
+	const IPC_SERIALIZE = 2;
+
+
+	// Thread states
+
+	/**
+	 * Terminating
+	 */
+	const STATE_TERM = 1;
+
+	/**
+	 * Initializing
+	 */
+	const STATE_INIT = 2;
+
+	/**
+	 * Waiting (ready for job, for example)
+	 */
+	const STATE_WAIT = 3;
+
+	/**
+	 * Working
+	 */
+	const STATE_WORK = 4;
+
+
+	// Types of IPC packets (internal usage)
 	const P_STATE  = 0x01; // State change packet
 	const P_JOB    = 0x02; // New job packet
 	const P_EVENT  = 0x04; // Event (from child) or read confirmation (from parent)
-	const P_DATA   = 0x08; // Flag that packet has data
-	const P_SERIAL = 0x10; // Flag that data in packet is serialized
 
-	// Types of IPC data transfer modes
-	const IPC_IGBINARY  = 1; // Igbinary serialization   (~6625 jobs per second in tests with 8 threads)
-	const IPC_SERIALIZE = 2; // Native PHP serialization (~6501 jobs per second in tests with 8 threads)
+	// Timer names prefixes (internal usage)
+	const TIMER_BASE = 'AzaThread:base:';
+	const TIMER_WAIT = 'AzaThread:wait:';
 
-	// Timer names prefixes
-	const TIMER_BASE = 'thread:base:';
-	const TIMER_WAIT = 'thread:wait:';
-
-	// Debug prefixes
-	const D_INIT  = 'INIT: ';
+	// Debug prefixes (internal usage)
+	const D_INIT  = 'INIT: ';  // Thread initializing
 	const D_WARN  = 'WARN: ';
 	const D_INFO  = 'INFO: ';
-	const D_EVENT = 'EVENT: ';
+	const D_EVENT = 'EVENT: '; // Worker events dispatching
 	const D_IPC   = 'IPC: ';   // Inter-process communication
 	const D_CLEAN = 'CLEAN: '; // Cleanup
 
@@ -76,10 +128,108 @@ abstract class Thread
 	#endregion
 
 
+	#region Settings. Overwrite in your thread class to customize.
+
+	/**
+	 * Whether the thread will wait for next tasks.
+	 * Preforked threads are always multitask.
+	 *
+	 * @see prefork
+	 */
+	protected $multitask = true;
+
+	/**
+	 * Whether to listen for all POSIX signals in master.
+	 * SIGCHLD is always listened.
+	 */
+	protected $listenMasterSignals = true;
+
+	/**
+	 * Perform pre-fork, to avoid wasting resources later.
+	 * Preforked threads are always multitask.
+	 *
+	 * @see multitask
+	 */
+	protected $prefork = true;
+
+	/**
+	 * Wait for the preforking child
+	 */
+	protected $preforkWait = false;
+
+	/**
+	 * Whether event locking is enabled.
+	 * Parent process notifies child that received sended event.
+	 * It's mostly for testing purposes - do not use it in
+	 * production because of performance lack.
+	 */
+	protected $eventLocking = false;
+
+	/**
+	 * Call {@link process} method with the specified arguments
+	 * (using {@link call_user_func_array}).
+	 * Creates a little performance overhead, so disabled by default.
+	 */
+	protected $argumentsMapping = false;
+
+	/**
+	 * Maximum timeout for master to wait for worker initialization (prefork)
+	 * (in seconds, can be fractional).
+	 * Set it to less than one, to disable.
+	 *
+	 * @see prefork
+	 * @see preforkWait
+	 */
+	protected $timeoutMasterInitWait = 3;
+
+	/**
+	 * Maximum timeout for master to wait for the job results
+	 * (in seconds, can be fractional).
+	 * Set it to less than one, to disable.
+	 */
+	protected $timeoutMasterResultWait = 5;
+
+	/**
+	 * Maximum timeout for worker to wait for the new job
+	 * (in seconds, can be fractional).
+	 * After it spawned child will die.
+	 * Set it to less than one, to disable.
+	 * Already this timeout is used with event locking.
+	 */
+	protected $timeoutWorkerJobWait = 600;
+
+	/**
+	 * Worker interval to check master process (in seconds, can be fractional).
+	 */
+	protected $intervalWorkerMasterChecks = 5;
+
+	/**
+	 * Maximum worker pipe read size in bytes.
+	 * 128kb by default
+	 */
+	protected $childReadSize = 0x20000;
+
+	/**
+	 * Maximum master pipe read size in bytes.
+	 * 128kb by default
+	 */
+	protected $masterReadSize = 0x20000;
+
+	/**
+	 * Whether to show debugging information
+	 * DO NOT USE IN PRODUCTION!
+	 *
+	 * @internal
+	 */
+	public $debug = false;
+
+	#endregion
+
+
 	#region Internal static properties
 
 	/**
-	 * All started threads count
+	 * All created threads count
 	 *
 	 * @var int
 	 */
@@ -119,18 +269,18 @@ abstract class Thread
 	private static $waitingThreads = array();
 
 	/**
-	 * Signal events
+	 * Signal events by slots (child/parent flag)
 	 *
-	 * @var Event[]
+	 * @var array[]
 	 */
 	private static $eventsSignals = array();
 
 	/**
-	 * Event base
+	 * Event loop
 	 *
 	 * @var EventBase
 	 */
-	private static $base;
+	private static $eventLoop;
 
 	#endregion
 
@@ -138,11 +288,18 @@ abstract class Thread
 	#region Internal properties
 
 	/**
-	 * Internal thread id
+	 * Internal unique consecutive thread id
 	 *
 	 * @var int
 	 */
 	private $id;
+
+	/**
+	 * Internal consecutive job id
+	 *
+	 * @var int
+	 */
+	private $jobId;
 
 	/**
 	 * Owner thread pool
@@ -216,167 +373,90 @@ abstract class Thread
 	private $processName = false;
 
 	/**
-	 * Thread state
+	 * Thread state. See self::STATE_* constants
 	 *
 	 * @var int
 	 */
 	private $state;
 
 	/**
-	 * Whether waiting loop is enabled
+	 * Last error code
+	 *
+	 * @var int|null
+	 */
+	private $lastErrorCode;
+
+	/**
+	 * Last error message
+	 *
+	 * @var string|null
+	 */
+	private $lastErrorMsg;
+
+	/**
+	 * Whether waiting loop is enabled.
+	 * Also used as flag for waiting for event read confirmation
 	 */
 	private $waiting = false;
 
 	/**
-	 * Cleaning flag
+	 * Flag if the thread started cleanup process
+	 * (and therefore can not be used more)
 	 */
-	private $cleaning = false;
-
-	#endregion
-
-
-	#region Internal protected properties
+	private $isCleaning = false;
 
 	/**
 	 * Current process pid
 	 *
 	 * @var int
 	 */
-	protected $pid;
+	private $pid;
 
 	/**
 	 * Parent process pid
 	 *
 	 * @var int
 	 */
-	protected $parent_pid;
+	private $parent_pid;
 
 	/**
 	 * Child process pid
 	 *
 	 * @var int
 	 */
-	protected $child_pid;
+	private $child_pid;
 
 	/**
 	 * Whether child is already forked
 	 */
-	protected $isForked = false;
+	private $isForked = false;
 
 	/**
 	 * Whether current process is child
 	 */
-	protected $isChild = false;
+	private $isChild = false;
 
 	/**
-	 * Arguments for the processing
+	 * Arguments for the current job
 	 */
-	protected $params = array();
+	private $params = array();
 
 	/**
 	 * Last processing result
 	 */
-	protected $result;
+	private $result;
+
+	/**
+	 * ID of the started job
+	 *
+	 * @var int
+	 */
+	private $jobStarted;
 
 	/**
 	 * The status of the success of the task
 	 */
-	protected $success = false;
-
-	#endregion
-
-
-	#region Settings. Overwrite in your thread class to customize.
-
-	/**
-	 * Whether the thread will wait for next tasks.
-	 * Preforked threads are always multitask.
-	 *
-	 * @see prefork
-	 */
-	protected $multitask = true;
-
-	/**
-	 * Whether to listen for all POSIX signals in master.
-	 * SIGCHLD is always listened.
-	 */
-	protected $listenMasterSignals = true;
-
-	/**
-	 * Perform pre-fork, to avoid wasting resources later.
-	 * Preforked threads are always multitask.
-	 *
-	 * @see multitask
-	 */
-	protected $prefork = true;
-
-	/**
-	 * Wait for the preforking child
-	 */
-	protected $preforkWait = false;
-
-	/**
-	 * Whether event locking is enabled.
-	 * Parent process notifies child that received sended event.
-	 */
-	protected $eventLocking = false;
-
-	/**
-	 * Call {@link process} method with the specified arguments
-	 * (using {@link call_user_func_array}).
-	 * Creates a little performance overhead, so disabled by default.
-	 */
-	protected $argumentsMapping = false;
-
-	/**
-	 * Worker initialization (prefork) timeout
-	 * (in seconds, can be fractional).
-	 * Set it to less than one, to disable.
-	 *
-	 * @see prefork
-	 * @see preforkWait
-	 */
-	protected $timeoutMasterInitWait = 3;
-
-	/**
-	 * Maximum timeout for master to wait for the job results
-	 * (in seconds, can be fractional).
-	 * Set it to less than one, to disable.
-	 */
-	protected $timeoutMasterResultWait = 5;
-
-	/**
-	 * Maximum timeout for worker to wait for the new job
-	 * (in seconds, can be fractional).
-	 * After it spawned child will die.
-	 * Set it to less than one, to disable.
-	 */
-	protected $timeoutWorkerJobWait = 600;
-
-	/**
-	 * Worker interval to check master process (in seconds, can be fractional).
-	 */
-	protected $intervalWorkerMasterChecks = 5;
-
-	/**
-	 * Maximum worker pipe read size in bytes.
-	 * 128kb by default
-	 */
-	protected $childReadSize = 0x20000;
-
-	/**
-	 * Maximum master pipe read size in bytes.
-	 * 128kb by default
-	 */
-	protected $masterReadSize = 0x20000;
-
-	/**
-	 * Whether to show debugging information
-	 * DO NOT USE IN PRODUCTION!
-	 *
-	 * @internal
-	 */
-	public $debug = false;
+	private $success = false;
 
 	#endregion
 
@@ -390,9 +470,11 @@ abstract class Thread
 	 * @param bool             $debug Whether to show debugging information
 	 * @param string           $pName Thread worker process name
 	 * @param ThreadPool $pool  Thread pool
+	 *
+	 * @internal
 	 */
-	public function __construct($debug = false, $pName = null,
-		$pool = null)
+	public function __construct($pName = null,
+		$pool = null, $debug = false)
 	{
 		// Prepare and save settings
 		$this->id = $id = ++self::$threadsCount;
@@ -402,20 +484,26 @@ abstract class Thread
 		self::$threads[$id] = $this;
 
 		$debug && $this->debug       = true;
-		$pool  && $this->pool        = $pool;
 		$pName && $this->processName = $pName;
 
-		$this->pid =
-		$this->parent_pid =
-		$this->child_pid = posix_getpid();
+		if ($pool) {
+			$this->pool = $pool;
+			$pool->registerThread($this);
+		}
 
-		$forks = self::$useForks;
+		if ($forks = self::$useForks) {
+			$this->pid =
+			$this->parent_pid =
+			$this->child_pid = posix_getpid();
+		}
 
 		// Debug can be enabled in class property, so read value
 		// @codeCoverageIgnoreStart
 		if ($debug = $this->debug) {
-			$message = 'Thread of type "'.get_called_class().'" created.';
-			$this->debug(self::D_INIT . $message);
+			$this->debug(
+				self::D_INIT . 'Thread of type "'.get_called_class().'" created ('
+				. ltrim(spl_object_hash($this), '0') . ')'
+			);
 			$forks || $this->debug(
 				self::D_WARN . 'Sync mode (you need Forks and LibEvent support'
 				.' and CLI sapi to use threads asynchronously)'
@@ -427,21 +515,20 @@ abstract class Thread
 		$this->setState(self::STATE_INIT);
 
 		// Forks preparing
-		$base = self::$base;
+		$base = self::$eventLoop;
 		if ($forks) {
-			// Init shared master event base
+			// Init shared master event loop
 			if (!$base) {
-				self::$base = $base = Base::getEventBase();
+				self::$eventLoop = $base = Base::getEventBase();
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(
-					self::D_INIT . 'Master event base initialized'
+					self::D_INIT . 'Master event loop initialized'
 				);
 				// @codeCoverageIgnoreEnd
 			}
 
 			// Listening for signals in master
-			self::$eventsSignals
-				|| $this->registerEventSignals($this->listenMasterSignals);
+			$this->registerEventSignals($this->listenMasterSignals);
 
 			// Basic master timeout initialization
 			$timer_name = self::TIMER_BASE . $this->id;
@@ -453,22 +540,27 @@ abstract class Thread
 			$this->eventsTimers[] = $timer_name;
 			// @codeCoverageIgnoreStart
 			$debug && $this->debug(
-				self::D_INIT . "[Timer] Master timer ($timer_name) added"
+				self::D_INIT . "[Timer] Master timer ($timer_name) is added"
 			);
 			// @codeCoverageIgnoreEnd
 		}
 
 		// On load hook
+		// @codeCoverageIgnoreStart
+		$debug && $this->debug(
+			self::D_INIT . "Call on load hook"
+		);
+		// @codeCoverageIgnoreEnd
 		$this->onLoad();
 
 		// Preforking
 		if ($forks && $this->prefork) {
-			$debug && $this->debug(self::D_INFO . 'Preforking');
+			$debug && $this->debug(self::D_INFO . 'Preforking...');
 
 			// Code for parent process
 			if ($this->forkThread()) {
 				// Worker initialization timeout
-				if (($interval = $this->timeoutMasterInitWait) > 0) {
+				if (0 < $interval = $this->timeoutMasterInitWait) {
 					$timer_name = self::TIMER_BASE . $this->id;
 					$base->timerStart(
 						$timer_name,
@@ -507,34 +599,163 @@ abstract class Thread
 			$this->setState(self::STATE_WAIT);
 
 			// Call "on fork" hook for synchronous fallback mode
-			$forks || $this->onFork();
+			if (!$forks) {
+				// @codeCoverageIgnoreStart
+				$debug && $this->debug(
+					self::D_INIT . "Call on fork hook (synchronous fallback mode)"
+				);
+				// @codeCoverageIgnoreEnd
+				$this->onFork();
+			}
 		}
 	}
 
 
+
+	/**
+	 * Starts job processing.
+	 * Specify any arguments for the job in call.
+	 *
+	 * You need to overwrite {@link process()} method
+	 * to specify your job logic.
+	 *
+	 * @return $this
+	 *
+	 * @throws Exception
+	 */
+	public function run()
+	{
+		if (self::STATE_WAIT !== $this->state) {
+			// Should not be called
+			// @codeCoverageIgnoreStart
+			throw new Exception(
+				"Can't run thread. It is not in waiting state."
+				." You need to use 'wait' method on thread instance"
+				." after each run and before first run if 'preforkWait'"
+				." property is not overrided to TRUE and you don't use pool."
+			);
+			// @codeCoverageIgnoreEnd
+		}
+
+		$this->jobStarted = $jobId = ++$this->jobId;
+
+		// @codeCoverageIgnoreStart
+		($debug = $this->debug) && $this->debug(
+			self::D_INFO . " >>> Job start (j{$jobId})"
+		);
+		// @codeCoverageIgnoreEnd
+
+		// Set state
+		$this->setState(self::STATE_WORK);
+
+		// Reset info
+		$this->result =
+		$this->lastErrorCode =
+		$this->lastErrorMsg = null;
+		$this->success = false;
+
+		// Job arguments
+		$args = func_get_args();
+
+		// Emulating thread with fork
+		if (self::$useForks) {
+			// Thread is alive
+			if ($this->isAlive()) {
+				// @codeCoverageIgnoreStart
+				$debug && $this->debug(
+					self::D_INFO . "Child is already running ({$this->child_pid})"
+				);
+				// @codeCoverageIgnoreEnd
+				$this->sendPacketToChild(self::P_JOB, array($jobId, $args));
+				$this->startMasterWorkTimeout();
+			}
+			// Forking
+			else {
+				// Safety net, just in case
+				$this->isForked && $this->stopWorker();
+
+				if ($this->forkThread()) {
+					// Code for parent process
+					$this->startMasterWorkTimeout(true);
+				} else {
+					// @codeCoverageIgnoreStart
+					// Code for child process
+
+					// Register signals events
+					$this->registerEventSignals();
+
+					// Process job
+					$this->callProcess($jobId, $args);
+					$this->state = self::STATE_WAIT; // For consistence
+
+					// Start main (infinite in theory) worker loop
+					$this->multitask
+						&& $this->evWorkerLoop();
+
+					$debug && $this->debug(
+						self::D_INFO . 'Simple end of work, exiting'
+					);
+					// Child ended it's work, terminating
+					$this->shutdown();
+					// @codeCoverageIgnoreEnd
+				}
+			}
+		}
+
+		// Synchronous fallback mode
+		else {
+			$this->callProcess($jobId, $args);
+			// @codeCoverageIgnoreStart
+			$debug && $this->debug(
+				self::D_INFO . 'Sync job ended'
+			);
+			// @codeCoverageIgnoreEnd
+		}
+
+		return $this;
+	}
+
+
+
+	#region Cleanup
+
 	/**
 	 * Destruction
+	 *
+	 * @internal
 	 */
 	public function __destruct()
 	{
-		$this->debug(self::D_INFO . 'Destructor');
+		// @codeCoverageIgnoreStart
+		$this->debug && $this->debug(
+			self::D_CLEAN . 'Destructor ('
+			. ltrim(spl_object_hash($this), '0') . ')'
+		);
+		// @codeCoverageIgnoreEnd
+
 		$this->cleanup();
 	}
 
 	/**
-	 * Thread cleanup
+	 * Thread cleanup.
+	 *
+	 * @param bool $forced [optional] <p>
+	 * Enable forced mode. Used for unnecessary
+	 * thread instances in child process.
+	 * </p>
 	 */
-	public function cleanup()
+	public function cleanup($forced = false)
 	{
-		if ($this->cleaning) {
+		if ($this->isCleaning) {
 			return;
 		}
-		$this->cleaning = true;
+		$this->isCleaning = true;
 		$this->state = self::STATE_TERM;
 
 		// @codeCoverageIgnoreStart
 		($debug = $this->debug) && $this->debug(
-			self::D_CLEAN . 'Cleanup'
+			self::D_CLEAN . 'Cleanup (' . ltrim(spl_object_hash($this), '0') . ')'
+			. ($forced ? ' (FORCED - redundant instance)' : '')
 		);
 		// @codeCoverageIgnoreEnd
 
@@ -542,120 +763,206 @@ abstract class Thread
 		$class    = get_called_class();
 		$isMaster = !$this->isChild;
 
-		// Event listeners
+
+		// External event listeners
 		$this->listeners = array();
 
+
 		// Threads pool
-		if ($pool = &$this->pool) {
-			unset(
-				$pool->threads[$id],
-				$pool->waiting[$id],
-				$pool->working[$id],
-				$pool->initializing[$id]
-			);
-			$pool->threadsCount--;
-			$this->pool = null;
+		if ($pool = $this->pool) {
+			// Basic cleanup
+			if (!$forced) {
+				$pool->unregisterThread($id);
+
+				// @codeCoverageIgnoreStart
+				$debug && $this->debug(
+					self::D_CLEAN . 'Thread is removed from pool'
+				);
+				// @codeCoverageIgnoreEnd
+			}
+
+			// Forced cleanup
+			else {
+				// Called only in child
+				// @codeCoverageIgnoreStart
+				$pool->detach();
+				// @codeCoverageIgnoreEnd
+			}
 		}
+		$this->pool = null;
+		unset($pool);
+
 
 		// Stop child process
-		// TODO: Don't wait, check after cleanup
-		$base = self::$base;
-		if ($isMaster && $this->isForked) {
-			$this->stopWorker(true);
+		$base = self::$eventLoop;
+		if (!$forced && $isMaster && $this->isForked) {
+			// TODO: Don't wait, check after cleanup?
+			$this->stopWorker();
 			// @codeCoverageIgnoreStart
 			$debug && $this->debug(
 				self::D_CLEAN . 'Worker process terminated'
 			);
 			// @codeCoverageIgnoreEnd
-
-			// Check for non-triggered events
-			$base && $base->resource && $base->loop(EVLOOP_NONBLOCK);
 		}
+
 
 		// Threads storage
 		unset(self::$threads[$id]);
-
-		// Events
-		if ($base && $base->resource) {
-			foreach ($this->eventsTimers as $t) {
-				$base->timerDelete($t);
-			}
-		}
-		if (!$isMaster || !self::$threads) {
-			foreach (self::$eventsSignals as $ev) {
-				$ev->free();
-			}
-			self::$eventsSignals = array();
-		}
-		$this->eventsTimers = array();
-		// @codeCoverageIgnoreStart
-		$debug && $this->debug(
-			self::D_CLEAN . 'All events freed'
-		);
-		// @codeCoverageIgnoreEnd
-
-		// Master event
-		if ($this->masterEvent) {
-			$this->masterEvent->free();
-			$this->masterEvent = null;
-			// @codeCoverageIgnoreStart
-			$debug && $this->debug(
-				self::D_CLEAN . 'Master event freed'
-			);
-			// @codeCoverageIgnoreEnd
-		}
-
-		// Child event
-		// @codeCoverageIgnoreStart
-		if ($this->childEvent) {
-			$this->childEvent->free();
-			$this->childEvent = null;
-			$debug && $this->debug(
-				self::D_CLEAN . 'Child event freed'
-			);
-		}
-		// @codeCoverageIgnoreEnd
-
-		// Pipes
-		if ($this->pipes) {
-			$this->pipes[1]->close();
-			// It's already closed after forking
-			$isMaster && $this->pipes[0]->close();
-			$this->pipes = null;
-			// @codeCoverageIgnoreStart
-			$debug && $this->debug(
-				self::D_CLEAN . 'Pipes destructed'
-			);
-			// @codeCoverageIgnoreEnd
-		}
-
-		// Last master thread cleanup
-		if ($isMaster && !self::$threads) {
-			self::$base = null;
-		}
-
-		// Child cleanup
-		else {
-			// Event base cleanup
-			self::$base = null;
-			Base::cleanEventBase();
-		}
-
-		// Threads storage
+		unset(self::$threadsByPids[$this->child_pid]);
 		unset(self::$threadsByClasses[$class][$id]);
 		if (empty(self::$threadsByClasses[$class])) {
 			unset(self::$threadsByClasses[$class]);
 		}
+
+
+		// Timer events
+		if (!$forced && $base && $base->resource) {
+			// Check for non-triggered events in loop
+			$base->loop(EVLOOP_NONBLOCK);
+			foreach ($this->eventsTimers as $t) {
+				$base->timerDelete($t);
+			}
+			// @codeCoverageIgnoreStart
+			$debug && $this->debug(
+				self::D_CLEAN . 'Timer events cleaned'
+			);
+			// @codeCoverageIgnoreEnd
+		}
+		$this->eventsTimers = array();
+
+
+		// Pipe events (master/child)
+		if (!$forced) {
+			// @codeCoverageIgnoreStart
+			if ($this->masterEvent) {
+				$this->masterEvent->free();
+				$debug && !$forced &&  $this->debug(
+					self::D_CLEAN . 'Master pipe event cleaned'
+					. " (e{$this->masterEvent->id})"
+				);
+			}
+			if ($this->childEvent) {
+				$this->childEvent->free();
+				$debug && !$forced &&  $this->debug(
+					self::D_CLEAN . 'Child pipe event cleaned'
+					. " (e{$this->childEvent->id})"
+				);
+			}
+			// @codeCoverageIgnoreEnd
+		}
+		$this->masterEvent = $this->childEvent = null;
+
+
+		// Pipes
+		if ($this->pipes) {
+			// @codeCoverageIgnoreStart
+			if ($debug) {
+				$ids = '';
+				if (isset($this->pipes[0])) {
+					$ids .= 'p'.$this->pipes[0]->id.', ';
+				}
+				$ids .= 'p'.$this->pipes[1]->id;
+			}
+			// @codeCoverageIgnoreEnd
+
+			$this->pipes[1]->close();
+			// It's already closed in child after forking
+			isset($this->pipes[0])
+				&& $this->pipes[0]->close();
+			$this->pipes = null;
+
+			// @codeCoverageIgnoreStart
+			/** @noinspection PhpUndefinedVariableInspection */
+			$debug && $this->debug(
+				self::D_CLEAN . "Pipes closed ($ids)"
+			);
+			// @codeCoverageIgnoreEnd
+		}
+
+
+		if (!$forced) {
+			// Signal events
+			$slotName = (int)$isMaster;
+			if (!$isMaster || !self::$threads) {
+				if (!empty(self::$eventsSignals[$slotName = (int)$isMaster])) {
+					/** @var Event $ev */
+					foreach (self::$eventsSignals[$slotName] as $ev) {
+						$ev->free();
+					}
+					// @codeCoverageIgnoreStart
+					$debug && $this->debug(
+						self::D_CLEAN . 'Signal events freed ('
+						. ($isMaster ? 'last master' : 'child')
+						. ')'
+					);
+				} else if ($debug) {
+					$this->debug(
+						self::D_CLEAN . 'Signal events not found ('
+						. ($isMaster ? 'last master' : 'child')
+						. ')'
+					);
+				}
+				// @codeCoverageIgnoreEnd
+				unset(self::$eventsSignals[$slotName]);
+			}
+			// @codeCoverageIgnoreStart
+			if ($debug && $isMaster && !empty(self::$eventsSignals[$slotName])) {
+				$this->debug(
+					self::D_CLEAN . 'Signal events saved (another threads available)'
+				);
+			}
+			// @codeCoverageIgnoreEnd
+
+
+			// Last thread (master) - detached event loop
+			if ($isMaster && !self::$threads) {
+				self::$eventLoop = null;
+				// @codeCoverageIgnoreStart
+				$debug && $this->debug(
+					self::D_CLEAN . 'Last thread (master) - event loop detached'
+				);
+				// @codeCoverageIgnoreEnd
+			}
+
+
+			// Child - event loop cleanup
+			// @codeCoverageIgnoreStart
+			else if (!$isMaster) {
+				// Event loop cleanup
+				self::$eventLoop = null;
+				Base::cleanEventBase();
+				$debug && $this->debug(
+					self::D_CLEAN . 'Child - event loop cleaned'
+				);
+			}
+			// @codeCoverageIgnoreEnd
+		}
+
+
+		// Processing data
+		$this->params = array();
+		$this->result = null;
+
+
+		// @codeCoverageIgnoreStart
+		$debug && $this->debug(
+			self::D_CLEAN . 'Cleanup ended ('
+			. ltrim(spl_object_hash($this), '0') . ')'
+		);
+		// @codeCoverageIgnoreEnd
 	}
+
+	#endregion
+
+
+
+	#region Internal processing
 
 
 	/**
 	 * Thread forking.
 	 *
-	 * Override this method if you want to do
-	 * something after/before forking.
-	 *
-	 * @throws Exception
+	 * @throws Exception if can't fork thread
 	 *
 	 * @return bool TRUE in parent, FALSE in child
 	 */
@@ -682,9 +989,11 @@ abstract class Thread
 		$debug = $this->debug;
 		if (!$this->pipes) {
 			$this->pipes = Socket::pair();
+
 			// @codeCoverageIgnoreStart
 			$debug && $this->debug(
-				self::D_INIT . 'Pipes initialized'
+				self::D_INIT . "Pipes initialized "
+				."(p{$this->pipes[0]->id}, p{$this->pipes[1]->id})"
 			);
 			// @codeCoverageIgnoreEnd
 		}
@@ -695,13 +1004,13 @@ abstract class Thread
 			self::D_INIT . 'Forking'
 		);
 		// @codeCoverageIgnoreEnd
-		$this->isForked = true;
-		$pid = Base::fork();
 
 		// Code for parent process
-		if ($pid) {
+		if ($pid = Base::fork()) {
+			$this->isForked = true;
 			self::$threadsByPids[$pid] = $this->id;
 			$this->child_pid = $pid;
+
 			// @codeCoverageIgnoreStart
 			$debug && $this->debug(
 				self::D_INIT . "Forked: parent ({$this->pid})"
@@ -714,13 +1023,14 @@ abstract class Thread
 					$this->pipes[0]->resource,
 					array($this, '_mEvCbRead'),
 					null,
-					// TODO: Add error callback?
-					function(){}
+					array($this, '_mEvCbError')
 				);
-				$ev->setBase(self::$base)->setPriority()->enable(EV_READ);
+				$ev->setBase(self::$eventLoop)->setPriority()->enable();
+
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(
 					self::D_INIT . 'Master pipe read event initialized'
+					. " (e{$this->masterEvent->id})"
 				);
 				// @codeCoverageIgnoreEnd
 			}
@@ -730,6 +1040,7 @@ abstract class Thread
 
 		// Code for child process
 		// @codeCoverageIgnoreStart
+		$this->isForked =
 		$this->isChild = true;
 		$this->pid =
 		$this->child_pid =
@@ -741,35 +1052,59 @@ abstract class Thread
 		// Closing master pipe
 		// It is not needed in the child
 		$this->pipes[0]->close();
+		$debug && $this->debug(
+			self::D_INIT . "Master pipe closed "
+			. "(p{$this->pipes[0]->id})"
+		);
 		unset($this->pipes[0]);
 
 		// Cleanup parent events
-		$this->eventsTimers = self::$eventsSignals = array();
+		$this->eventsTimers =
+		self::$eventsSignals = array();
 
 		// Cleanup event listeners (needed only in parent)
 		$this->listeners = array();
 
-		// Child event
-		if (!$this->childEvent) {
-			$this->childEvent = $ev = new EventBuffer(
-				$this->pipes[1]->resource,
-				array($this, '_wEvCbRead'),
-				null,
-				// TODO: Add error callback?
-				function(){}
-			);
-			$ev->setBase(self::$base)->setPriority()->enable(EV_READ);
-			$debug && $this->debug(
-				self::D_INIT . 'Worker pipe read event initialized'
-			);
+		// Cleanup master event
+		$this->masterEvent = null;
+
+		// Cleanup redundant thread instances
+		$curThreadId = $this->id;
+		foreach (self::$threads as $threadId => $thread) {
+			$threadId === $curThreadId
+				|| $thread->cleanup(true);
 		}
+		unset($thread, $threadId, $curThreadId);
+		$debug && $this->debug(
+			self::D_INIT . "Redundant (after forking)"
+			. " instances and data cleaned"
+		);
+
+		// Cleanup redundant pool instance
+		if ($pool = $this->pool) {
+			$pool->detach();
+		}
+		$this->pool = null;
+
+		// Child event
+		$this->childEvent = $ev = new EventBuffer(
+			$this->pipes[1]->resource,
+			array($this, '_wEvCbRead'),
+			null,
+			array($this, '_wEvCbError')
+		);
+		$ev->setBase(self::$eventLoop)->setPriority()->enable();
+		$debug && $this->debug(
+			self::D_INIT . 'Worker pipe read event initialized'
+			. " (e{$this->childEvent->id})"
+		);
 
 		// Process name
 		if ($name = $this->processName) {
 			$name .= ' (aza-php): worker';
 			Base::setProcessTitle($name);
 			$debug && $this->debug(
-				self::D_INIT . "Child process name is changed to: $name"
+				self::D_INIT . "Child process name is changed to [$name]"
 			);
 		}
 
@@ -784,96 +1119,17 @@ abstract class Thread
 	}
 
 	/**
-	 * Starts processing
-	 *
-	 * @return $this
-	 *
-	 * @throws Exception
-	 */
-	public function run()
-	{
-		if (self::STATE_WAIT !== $this->state) {
-			throw new Exception(
-				"Can't run thread. It is not in waiting state."
-				." You need to use 'wait' method on thread instance"
-				." after each run and before first run if 'preforkWait'"
-				." property is not overrided to TRUE and you don't use pool."
-			);
-		}
-
-		// @codeCoverageIgnoreStart
-		($debug = $this->debug) && $this->debug(
-			self::D_INFO . ' >>> Job start'
-		);
-		// @codeCoverageIgnoreEnd
-		$this->setState(self::STATE_WORK);
-		$this->result  = null;
-		$this->success = false;
-
-		$args = func_get_args();
-
-		// Emulating thread with fork
-		if (self::$useForks) {
-			// Thread is alive
-			if ($this->isAlive()) {
-				// @codeCoverageIgnoreStart
-				$debug && $this->debug(
-					self::D_INFO . "Child is already running ({$this->child_pid})"
-				);
-				// @codeCoverageIgnoreEnd
-				$this->sendPacketToChild(self::P_JOB, $args ?: null);
-				$this->startMasterWorkTimeout();
-			}
-			// Forking
-			else {
-				if ($this->forkThread()) {
-					// Code for parent process
-					$this->startMasterWorkTimeout();
-				} else {
-					// @codeCoverageIgnoreStart
-					// Code for child process
-					$this->callProcess($args);
-
-					// Start main (infinite in theory) worker loop
-					$this->multitask
-						&& $this->evWorkerLoop();
-
-					$debug && $this->debug(
-						self::D_INFO . 'Simple end of work, exiting'
-					);
-					// Child ended it's work, terminating
-					$this->shutdown();
-					// @codeCoverageIgnoreEnd
-				}
-			}
-		}
-
-		// Synchronous fallback mode
-		else {
-			$this->callProcess($args);
-			// @codeCoverageIgnoreStart
-			$debug && $this->debug(
-				self::D_INFO . 'Sync job ended'
-			);
-			// @codeCoverageIgnoreEnd
-		}
-
-		return $this;
-	}
-
-	/**
 	 * Wrapper for {@link process} call
 	 *
 	 * @see process
 	 *
+	 * @param int   $jobId
 	 * @param array $arguments
 	 */
-	private function callProcess($arguments)
+	private function callProcess($jobId ,$arguments)
 	{
 		// Prepares and sets arguments for processing
-		$this->params = $arguments = $arguments && is_array($arguments)
-				? $arguments
-				: array();
+		$this->params = $arguments;
 
 		// @codeCoverageIgnoreStart
 		if ($this->debug) {
@@ -890,10 +1146,13 @@ abstract class Thread
 		// Calls processing and set result
 		// Uses so short syntax for speedup
 		$this->setResult(
+			$jobId,
 			$arguments && $this->argumentsMapping
+					// Arguments mapping
 					? call_user_func_array(
 						array($this, 'process'), $arguments
 					)
+					// Default call
 					: $this->process()
 		);
 	}
@@ -901,13 +1160,13 @@ abstract class Thread
 	/**
 	 * Prepares and starts worker event loop
 	 *
-	 * @param bool $setState Set waiting state
+	 * @param bool $prefork Set waiting state
 	 *
 	 * @throws Exception if called in parent
 	 *
 	 * @codeCoverageIgnore Called only in child (can't get coverage from another process)
 	 */
-	private function evWorkerLoop($setState = false)
+	private function evWorkerLoop($prefork = false)
 	{
 		($debug = $this->debug) && $this->debug(
 			self::D_INIT . "Preparing worker loop"
@@ -919,9 +1178,9 @@ abstract class Thread
 			);
 		}
 
-		$this->registerEventSignals();
+		$prefork && $this->registerEventSignals();
 
-		$base = self::$base;
+		$base = self::$eventLoop;
 
 		// Worker timer to check master process
 		$timer_name = self::TIMER_BASE;
@@ -931,7 +1190,7 @@ abstract class Thread
 		$this->eventsTimers[] = $timer_name;
 		$debug && $this->debug(
 			self::D_INIT . "[Timer] Worker interval to check master process"
-			." ($timer_name) added and started ($timeout sec)"
+			." ($timer_name) is added and started ($timeout sec)"
 		);
 
 		// Worker wait timer
@@ -940,17 +1199,19 @@ abstract class Thread
 			$base->timerAdd($timer_name, $timeout, $timerCb);
 			$this->eventsTimers[] = $timer_name;
 			$debug && $this->debug(
-				self::D_INIT . "[Timer] Worker job wait timer ($timer_name) "
-				."added and started ($timeout sec)"
+				self::D_INIT . "[Timer] Worker job wait interval ($timer_name) "
+				."is added and started ($timeout sec)"
 			);
 		}
 
-		$setState && $this->setState(self::STATE_WAIT);
+		$prefork && $this->setState(self::STATE_WAIT);
 
 		$debug && $this->debug(self::D_INFO . 'Loop (worker) start');
 		$base->loop();
 		$debug && $this->debug(self::D_INFO . 'Loop (worker) end');
 	}
+
+	#endregion
 
 
 
@@ -1015,12 +1276,12 @@ abstract class Thread
 		if (self::$useForks && self::STATE_WAIT !== $this->state) {
 			// @codeCoverageIgnoreStart
 			$this->debug && $this->debug(
-				self::D_INFO . "Loop (master waiting) start [#{$this->id}]"
+				self::D_INFO . "Loop (master waiting) start"
 			);
 			// @codeCoverageIgnoreEnd
-			$this->waiting = true;
 
 			// Save thread id and start loop
+			$this->waiting = true;
 			self::$waitingThread = $this->id;
 			self::evMasterLoop();
 			self::$waitingThread = null;
@@ -1047,10 +1308,10 @@ abstract class Thread
 	{
 		if (self::$useForks && $threadIds) {
 			// @codeCoverageIgnoreStart
-			self::stGetDebug($thread) && self::stDebug(
-				self::D_INFO . 'Loop (master theads waiting) start: [#'
-					. join(', #', (array)$threadIds) . ']',
-				$thread
+			self::stGetDebug() && self::stDebug(
+				self::D_INFO . 'Loop (master threads waiting) start: ['
+					. join(', ', (array)$threadIds) . ']',
+				true
 			);
 			// @codeCoverageIgnoreEnd
 
@@ -1064,24 +1325,27 @@ abstract class Thread
 		}
 	}
 
+
 	/**
 	 * Starts master event loop
+	 *
+	 * @throws Exception
 	 */
 	private static function evMasterLoop()
 	{
-		if (!$base = self::$base) {
+		if (!$base = self::$eventLoop) {
 			// Should not be called
 			// @codeCoverageIgnoreStart
 			throw new Exception(
-				"Can't start loop (master). EventBase is cleaned"
+				"Can't start loop (master). It'is cleaned"
 			);
 			// @codeCoverageIgnoreEnd
 		}
 
 		// @codeCoverageIgnoreStart
-		($debug = self::stGetDebug($thread)) && self::stDebug(
+		($debug = self::stGetDebug()) && self::stDebug(
 			self::D_INFO . 'Loop (master) start',
-			$thread
+			true
 		);
 		// @codeCoverageIgnoreEnd
 
@@ -1090,26 +1354,37 @@ abstract class Thread
 		// @codeCoverageIgnoreStart
 		$debug && self::stDebug(
 			self::D_INFO . 'Loop (master) end',
-			$thread
+			true
 		);
 		// @codeCoverageIgnoreEnd
 	}
 
 	/**
 	 * Starts master work timeout
+	 *
+	 * @param bool $addInitWait [optional] <p>
+	 * Add masterInitWait timeout to the waiting time.
+	 * Used if child is not alive.
+	 * </p>
 	 */
-	private function startMasterWorkTimeout()
+	private function startMasterWorkTimeout($addInitWait = false)
 	{
-		if (0 < $interval = $this->timeoutMasterResultWait) {
-			self::$base->timerStart(
+		if (0 < $timeout = $this->timeoutMasterResultWait) {
+			$addInitWait
+				&& 0 < $this->timeoutMasterInitWait
+				&& $timeout += $this->timeoutMasterInitWait;
+
+			self::$eventLoop->timerStart(
 				self::TIMER_BASE . $this->id,
-				$interval,
+				$timeout,
 				self::STATE_WORK
 			);
+
 			// @codeCoverageIgnoreStart
 			$this->debug && $this->debug(
-				self::D_INFO . "[Timer] Master timer (" . self::TIMER_BASE . "{$this->id}) "
-				."started for WORK ($interval sec)"
+				self::D_INFO . "[Timer] Master timer ("
+				. self::TIMER_BASE . $this->id
+				.") started for WORK ($timeout sec)"
 			);
 			// @codeCoverageIgnoreEnd
 		}
@@ -1119,7 +1394,7 @@ abstract class Thread
 
 
 
-	#region Event system
+	#region Thread events dispatching
 
 	/**
 	 * Connects a listener to a given event.
@@ -1184,8 +1459,7 @@ abstract class Thread
 		// @codeCoverageIgnoreStart
 		if ($this->isChild) {
 			$debug && $this->debug(
-				self::D_EVENT . "Send event packet to parent "
-				."and flush the buffer"
+				self::D_EVENT . "Send event packet to parent"
 			);
 
 			// Add packet to buffer
@@ -1201,7 +1475,7 @@ abstract class Thread
 			$debug && $this->debug(
 				self::D_EVENT . "Flush buffer to notify parent immidiatly"
 			);
-			self::$base->loop(EVLOOP_NONBLOCK);
+			self::$eventLoop->loop(EVLOOP_NONBLOCK);
 		}
 		// @codeCoverageIgnoreEnd
 
@@ -1234,12 +1508,13 @@ abstract class Thread
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(
 					self::D_WARN . "Exception is catched in listener. "
-					."Break loop and rethrow exception"
+					. "Break loop and rethrow exception: " . PHP_EOL . $e
 				);
 				// @codeCoverageIgnoreEnd
 
 				// Break event loop to avoid freezes and other bugs
-				self::$base && self::$base->loopBreak();
+				self::$eventLoop && self::$eventLoop->loopBreak();
+
 				throw $e;
 			}
 		}
@@ -1255,10 +1530,10 @@ abstract class Thread
 
 
 
-	#region Getters/Setters
+	#region Getters
 
 	/**
-	 * Returns unique thread id
+	 * Returns internal unique thread id
 	 *
 	 * @return int
 	 */
@@ -1266,6 +1541,70 @@ abstract class Thread
 	{
 		return $this->id;
 	}
+
+
+	/**
+	 * Returns current process pid
+	 *
+	 * @return int
+	 */
+	public function getPid()
+	{
+		return $this->pid;
+	}
+
+	/**
+	 * Returns parent process pid
+	 *
+	 * @return int
+	 */
+	public function getParentPid()
+	{
+		return $this->parent_pid;
+	}
+
+	/**
+	 * Returns child process pid
+	 *
+	 * @return int
+	 */
+	public function getChildPid()
+	{
+		return $this->child_pid;
+	}
+
+
+	/**
+	 * Returns whether current process is child
+	 *
+	 * @return bool
+	 */
+	public function getIsChild()
+	{
+		return $this->isChild;
+	}
+
+	/**
+	 * Returns whether child is already forked
+	 *
+	 * @return bool
+	 */
+	public function getIsForked()
+	{
+		return $this->isForked;
+	}
+
+	/**
+	 * Returns if the thread started cleanup process
+	 * (and therefore can not be used more).
+	 *
+	 * @return bool
+	 */
+	public function getIsCleaning()
+	{
+		return $this->isCleaning;
+	}
+
 
 	/**
 	 * Returns success of the processing.
@@ -1289,8 +1628,9 @@ abstract class Thread
 		return $this->result;
 	}
 
+
 	/**
-	 * Returns thread state
+	 * Returns thread status
 	 *
 	 * @return int
 	 */
@@ -1300,7 +1640,7 @@ abstract class Thread
 	}
 
 	/**
-	 * Returns thread state name
+	 * Returns thread status name
 	 *
 	 * @param int $state [optional] <p>
 	 * Integer state value. Current state will be used instead.
@@ -1310,34 +1650,73 @@ abstract class Thread
 	 */
 	public function getStateName($state = null)
 	{
-		isset($state) || $state = $this->state;
+		if (!$state) {
+			$state = $this->state;
+		}
 		return self::STATE_WAIT === $state
 				? 'WAIT'
 				: (self::STATE_WORK === $state
-				? 'WORK'
-				: (self::STATE_INIT === $state
-				? 'INIT'
-				: (self::STATE_TERM === $state
-				? 'TERM'
-				: 'UNKNOWN')));
+						? 'WORK'
+						: (self::STATE_INIT === $state
+								? 'INIT'
+								: (self::STATE_TERM === $state
+										? 'TERM'
+										: 'UNKNOWN')));
+	}
+
+
+	/**
+	 * Returns last error code
+	 *
+	 * @return int|null
+	 */
+	public function getLastErrorCode()
+	{
+		return $this->lastErrorCode;
 	}
 
 	/**
-	 * Returns thread event base
+	 * Returns last error message
+	 *
+	 * @return null|string
+	 */
+	public function getLastErrorMsg()
+	{
+		return $this->lastErrorMsg;
+	}
+
+
+	/**
+	 * Returns thread event loop
 	 *
 	 * @return EventBase|null
 	 */
-	public function getEventBase()
+	public function getEventLoop()
 	{
-		return self::$base;
+		return self::$eventLoop;
 	}
 
 
+
 	/**
-	 * Returns processing parameter
+	 * Returns arguments for the current job
 	 *
-	 * @param int   $index   Parameter index
-	 * @param mixed $default Default value if parameter isn't set
+	 * @return array
+	 */
+	protected function getParams()
+	{
+		return $this->params;
+	}
+
+	/**
+	 * Returns argument for the current job
+	 *
+	 * @param int $index <p>
+	 * Argument index
+	 * </p>
+	 * @param mixed $default [optional] <p>
+	 * Default value if parameter isn't set
+	 * </p>
 	 *
 	 * @return mixed
 	 */
@@ -1348,6 +1727,11 @@ abstract class Thread
 				: $default;
 	}
 
+	#endregion
+
+
+
+	#region Internal getters/setters
 
 	/**
 	 * Checks if the child process is alive
@@ -1356,19 +1740,19 @@ abstract class Thread
 	 */
 	private function isAlive()
 	{
-		return !self::$useForks
-		       || $this->isForked && 0 === pcntl_waitpid(
-					$this->child_pid, $s, WNOHANG
-				);
+		return $this->isForked && 0 === pcntl_waitpid(
+			$this->child_pid, $s, WNOHANG
+		);
 	}
 
 
 	/**
 	 * Sets processing result
 	 *
-	 * @param mixed $res
+	 * @param mixed $jobId
+	 * @param mixed $result
 	 */
-	private function setResult($res = null)
+	private function setResult($jobId, $result)
 	{
 		// @codeCoverageIgnoreStart
 		$this->debug && $this->debug(
@@ -1379,16 +1763,18 @@ abstract class Thread
 		// Send result packet to parent
 		// @codeCoverageIgnoreStart
 		if ($this->isChild) {
-			$this->sendPacketToParent(self::P_JOB, null, $res);
+			$this->sendPacketToParent(
+				self::P_JOB, null, array($jobId, $result)
+			);
 		}
 		// @codeCoverageIgnoreEnd
 
 		// Change result
 		else {
 			if ($pool = $this->pool) {
-				$pool->results[ $this->id ] = $res;
+				$pool->setResultForThread($this->id, $result);
 			}
-			$this->result = $res;
+			$this->result  = $result;
 			$this->success = true;
 			$this->setState(self::STATE_WAIT);
 		}
@@ -1401,7 +1787,7 @@ abstract class Thread
 	 */
 	private function setState($state)
 	{
-		$state = (int)$state;
+		$this->state = $state;
 
 		// @codeCoverageIgnoreStart
 		if ($debug = $this->debug) {
@@ -1421,82 +1807,84 @@ abstract class Thread
 
 		// Change state (in parent)
 		else {
-			$this->state = $state;
 			$wait = (self::STATE_WAIT === $state);
 			$threadId = $this->id;
 
-			// Pool processing
-			if ($pool = $this->pool) {
-				// Waiting
-				if ($wait) {
-					if (!$this->success
-					    && empty($pool->initializing[$threadId])
-					    && isset(self::$waitingThreads[$threadId])
-					) {
-						$pool->failed[$threadId] = $threadId;
-					}
-					unset(
-						$pool->working[$threadId],
-						$pool->initializing[$threadId]
-					);
-					$pool->waiting[$threadId] = $threadId;
+			// Waiting
+			if ($wait) {
+				// Should not be called
+				// @codeCoverageIgnoreStart
+				if ($this->jobStarted && !$this->success && !$this->lastErrorCode) {
+					$this->lastErrorCode = self::ERR_OTHER;
+					$this->lastErrorMsg  = 'Worker stopped';
 				}
-				// Other states
-				else {
-					unset($pool->waiting[$threadId]);
-					if ($state & self::STATE_WORK) {
-						$pool->working[$threadId] = $threadId;
-						unset($pool->initializing[$threadId]);
-					} else if ($state & self::STATE_INIT) {
-						$pool->initializing[$threadId] = $threadId;
-						unset($pool->working[$threadId]);
+				// @codeCoverageIgnoreEnd
+
+				// Forked thread and event loop
+				if (self::$useForks) {
+					// Stop result waiting timer
+					$base = self::$eventLoop;
+					$base->timerStop($timer_name = self::TIMER_BASE . $threadId);
+					// @codeCoverageIgnoreStart
+					$debug && $this->debug(
+						self::D_INFO . "[Timer] Master timer ($timer_name) stopped"
+					);
+					// @codeCoverageIgnoreEnd
+
+					// One waiting thread
+					if ($this->waiting) {
+						$this->waiting = false;
+
+						// Only break loop for waiting thread
+						if (!($waitingThread = self::$waitingThread)
+						    || $threadId === $waitingThread
+						) {
+							// @codeCoverageIgnoreStart
+							$debug && $this->debug(
+								self::D_INFO . "Loop (master waiting) end"
+							);
+							// @codeCoverageIgnoreEnd
+							$base->loopBreak();
+						} else {
+							// @codeCoverageIgnoreStart
+							$debug && $this->debug(
+								self::D_INFO . "Master waiting ended "
+								. "not breaking loop"
+							);
+							// @codeCoverageIgnoreEnd
+						}
+					}
+
+					// Several waiting threads
+					else if (isset(self::$waitingThreads[$threadId])) {
+						// @codeCoverageIgnoreStart
+						$debug && $this->debug(
+							self::D_INFO . 'Loop (master threads waiting) end'
+						);
+						// @codeCoverageIgnoreEnd
+						$base->loopBreak();
 					}
 				}
 			}
 
-			// Waiting
-			if ($wait && self::$useForks) {
-				// Stop result waiting timer
-				$base = self::$base;
-				$base->timerStop($timer_name = self::TIMER_BASE . $threadId);
-				// @codeCoverageIgnoreStart
-				$debug && $this->debug(
-					self::D_INFO . "[Timer] Master timer ($timer_name) stopped"
-				);
-				// @codeCoverageIgnoreEnd
-
-				// One waiting thread
-				if ($this->waiting) {
-					$this->waiting = false;
-
-					// Only break loop for waiting thread
-					if (!($waitingThread = self::$waitingThread)
-					    || $threadId === $waitingThread
-					) {
-						// @codeCoverageIgnoreStart
-						$debug && $this->debug(
-							self::D_INFO . "Loop (master waiting) end [#$threadId]"
-						);
-						// @codeCoverageIgnoreEnd
-						$base->loopBreak();
-					} else {
-						// @codeCoverageIgnoreStart
-						$debug && $this->debug(
-							self::D_INFO . "Master waiting ended "
-							."without breaking loop [#$threadId]"
-						);
-						// @codeCoverageIgnoreEnd
-					}
-				}
-
-				// Several waiting threads
-				else if (isset(self::$waitingThreads[$threadId])) {
-					// @codeCoverageIgnoreStart
-					$debug && $this->debug(
-						self::D_INFO . 'Loop (master theads waiting) end'
+			// Pool processing
+			$pool = $this->pool;
+			if ($pool) {
+				// Waiting
+				if ($wait) {
+					$pool->markThreadWaiting(
+						$threadId,
+						$this->lastErrorCode,
+						$this->lastErrorMsg
 					);
-					// @codeCoverageIgnoreEnd
-					$base->loopBreak();
+				}
+				// Working
+				else if (self::STATE_WORK & $state) {
+					$pool->markThreadWorking($threadId);
+				}
+				// Initializing
+				else if (self::STATE_INIT & $state) {
+					$pool->markThreadInitializing($threadId);
 				}
 			}
 		}
@@ -1506,7 +1894,7 @@ abstract class Thread
 
 
 
-	#region Pipe events callbacks
+	#region Event loop callbacks
 
 	/**
 	 * Worker read event callback
@@ -1526,7 +1914,7 @@ abstract class Thread
 	public function _wEvCbRead($buf, $args)
 	{
 		($debug = $this->debug) && $this->debug(
-			self::D_INFO . 'Worker pipe read event'
+			self::D_INFO . "Worker pipe read event; $buf"
 		);
 
 		// Receive packets
@@ -1539,18 +1927,10 @@ abstract class Thread
 			return;
 		}
 
-		// Restart waiting timeout
-		$base = self::$base;
-		if ($base->timerExists($timer = self::TIMER_WAIT)) {
-			$base->timerStart($timer);
-			$debug && $this->debug(
-				self::D_INFO . '[Timer] Job waiting timeout restarted'
-			);
-		}
-
+		// Handle packets
+		$base = self::$eventLoop;
 		foreach ($packets as $p) {
 			$packet = $p['packet'];
-			$data   = $p['data'];
 
 			$debug && $this->debug(sprintf(
 				"%s => Packet: [0x%x]", self::D_IPC, $packet
@@ -1558,18 +1938,14 @@ abstract class Thread
 
 			// Job packet
 			if ($packet & self::P_JOB) {
-				if ($packet & self::P_DATA) {
-					$data = $this->peekPacketData($data, $packet);
-					$debug && $this->debug(
-						self::D_IPC . ' => Packet: job with arguments'
-					);
-				} else {
-					$debug && $this->debug(
-						self::D_IPC . ' => Packet: job'
-					);
-					$data = array();
-				}
-				$this->callProcess($data);
+				list($jobId, $args) = $this->peekPacketData($p['data']);
+
+				$debug && $this->debug(
+					self::D_IPC . ' => Packet: job'
+					. ($args ? ' with arguments' : '')
+				);
+
+				$this->callProcess($jobId, $args);
 			}
 
 			// Event read confirmation
@@ -1582,11 +1958,42 @@ abstract class Thread
 				$base->loopBreak();
 			}
 
-			// Unknown packet
+			// Unknown packet (should not be called)
 			else {
 				$base->loopBreak();
-				throw new Exception("Unknown packet [$packet]");
+				throw new Exception(sprintf(
+					"Unknown IPC packet [0x%x]", $packet
+				));
 			}
+		}
+
+		// Restart waiting timeout
+		$timer = self::TIMER_WAIT;
+		if ($base->timerExists($timer)) {
+			$base->timerStart($timer);
+			$debug && $this->debug(
+				self::D_INFO . '[Timer] Job waiting interval restarted'
+			);
+		}
+	}
+
+	/**
+	 * Worker error event callback
+	 *
+	 * @see forkThread
+	 * @see EventBuffer::setCallback
+	 *
+	 * @internal
+	 *
+	 * @param resource $buf   Buffered event
+	 * @param int      $what  Error info
+	 *
+	 * @codeCoverageIgnore Should not be called
+	 */
+	public function _wEvCbError($buf, $what)
+	{
+		if ($this->debug) {
+			$this->evErrorDebug($buf, $what);
 		}
 	}
 
@@ -1598,9 +2005,9 @@ abstract class Thread
 	 *
 	 * @internal
 	 *
-	 * @param string $name
-	 * @param mixed  $arg
-	 * @param int    $i
+	 * @param string $name Timer name
+	 * @param mixed  $arg  Timer argument (not used)
+	 * @param int    $i    Timer iteration (for intervals)
 	 *
 	 * @return bool true to restrst worker interval
 	 *
@@ -1611,16 +2018,17 @@ abstract class Thread
 		$die = false;
 
 		// Worker wait
-		if ($name === self::TIMER_WAIT) {
-			$this->debug(
-				self::D_WARN . '[Timer] Timeout (worker waiting) exceeded, exiting'
+		if (self::TIMER_WAIT === $name) {
+			$this->debug && $this->debug(
+				self::D_WARN . '[Timer] Timeout (worker waiting, '
+				. $this->timeoutWorkerJobWait .' sec) exceeded, exiting'
 			);
 			$die = true;
 		}
 
 		// Worker check
 		else if (!Base::getProcessIsAlive($this->parent_pid)) {
-			$this->debug(
+			$this->debug && $this->debug(
 				self::D_WARN . 'Parent is dead, exiting'
 			);
 			$die = true;
@@ -1628,13 +2036,15 @@ abstract class Thread
 
 		// Break event loop and die
 		if ($die) {
-			self::$base->loopBreak();
+			self::$eventLoop->loopBreak();
 			$this->shutdown();
+			return false;
 		}
 
 		// Restart interval
 		$this->debug && $this->debug(
-			self::D_INFO . "[Timer] Restart worker interval event ($name; $i iteration)"
+			self::D_INFO . "[Timer] Restart worker "
+			. "interval ($name; $i iteration; arg: [$arg])"
 		);
 		return true;
 	}
@@ -1643,7 +2053,7 @@ abstract class Thread
 	/**
 	 * Master read event callback
 	 *
-	 * @see __construct
+	 * @see forkThread
 	 * @see EventBuffer::setCallback
 	 *
 	 * @internal
@@ -1657,7 +2067,7 @@ abstract class Thread
 	{
 		// @codeCoverageIgnoreStart
 		($debug = $this->debug) && $this->debug(
-			self::D_INFO . 'Master pipe read event'
+			self::D_INFO . "Master pipe read event; $buf"
 		);
 		// @codeCoverageIgnoreEnd
 
@@ -1671,32 +2081,32 @@ abstract class Thread
 		}
 
 		foreach ($packets as $p) {
-			$threadId = $this->id;
-			$packet   = $p['packet'];
-			$value    = $p['value'];
-			$data     = $p['data'];
+			$packet = $p['packet'];
 
 			// @codeCoverageIgnoreStart
-			$debug && $this->debug(
-				self::D_IPC . " <= Packet: [$packet]"
-			);
+			$debug && $this->debug(sprintf(
+				"%s <= Packet: [0x%x]", self::D_IPC, $packet
+			));
 			// @codeCoverageIgnoreEnd
 
 			// Check thread id
+			$threadId = $this->id;
 			if (!isset(self::$threads[$threadId])) {
 				// Should not be called
 				// @codeCoverageIgnoreStart
-				self::$base && self::$base->loopBreak();
-				throw new Exception(
-					"Packet [$packet:$value] for unknown thread #$threadId"
-				);
+				self::$eventLoop->loopBreak();
+				throw new Exception(sprintf(
+					"Packet [0x%x:%s] for unknown thread #%d",
+					$packet, $p['value'], $threadId
+				));
 				// @codeCoverageIgnoreEnd
 			}
 			$thread = self::$threads[$threadId];
 
 			// Packet data
-			if (self::P_DATA & $packet) {
-				$data = $this->peekPacketData($data, $packet);
+			$data = $p['data'];
+			if ('' != $data) {
+				$data = $this->peekPacketData($data);
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(
 					self::D_IPC . ' <= Packet: data received'
@@ -1713,7 +2123,7 @@ abstract class Thread
 					self::D_IPC . ' <= Packet: state'
 				);
 				// @codeCoverageIgnoreEnd
-				$thread->setState($value);
+				$thread->setState((int)$p['value']);
 			}
 
 			// Event packet
@@ -1731,29 +2141,73 @@ abstract class Thread
 					// @codeCoverageIgnoreEnd
 					$thread->sendPacketToChild(self::P_EVENT);
 				}
-				$thread->trigger($value, $data);
+				$thread->trigger($p['value'], $data);
 			}
 
 			// Job (result) packet
 			else if (self::P_JOB & $packet) {
+				$jobId = $data[0];
+
 				// @codeCoverageIgnoreStart
-				$debug && $this->debug(
-					self::D_IPC . ' <= Packet: job ended'
-				);
+
+				// Discard duplicate packet.
+				// Very strange situation, but sometimes job result packet
+				// can be duplicated (when child dies for example)
+				if ($this->success) {
+					$debug && $this->debug(
+						self::D_WARN . '<= Packet: job ended. Discarded (duplicate)'
+					);
+				}
+				// Discard orphaned packet. It can occur if child sent a packet
+				// and died unexpectedly, so a job is marked as failed
+				else if ($jobId != $this->jobStarted) {
+					$debug && $this->debug(
+						self::D_WARN . '<= Packet: job ended. Discarded (orphaned)'
+					);
+				}
 				// @codeCoverageIgnoreEnd
-				$thread->setResult($data);
+
+				// Normal job end
+				else {
+					// @codeCoverageIgnoreStart
+					$debug && $this->debug(
+						self::D_IPC . ' <= Packet: job ended'
+					);
+					// @codeCoverageIgnoreEnd
+
+					$thread->setResult($jobId, $data[1]);
+				}
 			}
 
-			// Unknown packet
+			// Unknown packet (should not be called)
 			else {
-				// Should not be called
 				// @codeCoverageIgnoreStart
-				self::$base && self::$base->loopBreak();
-				throw new Exception(
-					"Unknown packet [$packet]"
-				);
+				self::$eventLoop->loopBreak();
+				throw new Exception(sprintf(
+					"Unknown IPC packet [0x%x]", $packet
+				));
 				// @codeCoverageIgnoreEnd
 			}
+		}
+	}
+
+	/**
+	 * Master error event callback
+	 *
+	 * @see forkThread
+	 * @see EventBuffer::setCallback
+	 *
+	 * @internal
+	 *
+	 * @param resource $buf   Buffered event
+	 * @param int      $what  Error info
+	 *
+	 * @codeCoverageIgnore Should not be called
+	 */
+	public function _mEvCbError($buf, $what)
+	{
+		if ($this->debug) {
+			$this->evErrorDebug($buf, $what);
 		}
 	}
 
@@ -1775,38 +2229,89 @@ abstract class Thread
 	 */
 	public function _mEvCbTimer($name, $arg, $i)
 	{
-		// @codeCoverageIgnoreStart
-		$this->debug && $this->debug(
-			self::D_WARN . "[Timer] Master timeout exceeded ({$name} - {$arg}; $i iteration)"
-		);
-		// @codeCoverageIgnoreEnd
-
-		$killed = $this->stopWorker();
-
-		$arg = (int)$arg;
-		if (self::STATE_WORK & $arg) {
-			if ($killed) {
-				self::$base && self::$base->loopBreak();
-				throw new Exception(
-					"Exceeded timeout: thread work "
-					."({$this->timeoutMasterResultWait} sec.)"
-				);
-			}
-		} else if (self::STATE_INIT & $arg) {
-			// TODO: Check if child is really not initialized?
-			self::$base && self::$base->loopBreak();
-			throw new Exception(
-				"Exceeded timeout: thread initialization "
-				."({$this->timeoutMasterInitWait} sec.)"
-			);
-		} else {
-			// Should not be called
+		// Job results wait timeout
+		if (self::STATE_WORK & ($arg = (int)$arg)) {
 			// @codeCoverageIgnoreStart
-			self::$base && self::$base->loopBreak();
-			throw new Exception(
-				"Unknown timeout ({$name}; $i iteration)"
+			$this->debug && $this->debug(
+				self::D_WARN . "[Timer] Master work wait timeout "
+				. "exceeded; " . $this->timeoutMasterResultWait
+				. "sec ($name; $i iteration; arg: [$arg])"
 			);
 			// @codeCoverageIgnoreEnd
+
+			$code = self::ERR_TIMEOUT_RESULT;
+			$msg  = "Exceeded timeout: thread work "
+			        ."({$this->timeoutMasterResultWait} sec.)";
+		}
+		// Worker initialization wait timeout
+		else if (self::STATE_INIT & $arg) {
+			// @codeCoverageIgnoreStart
+			$this->debug && $this->debug(
+				self::D_WARN . "[Timer] Master initialization wait "
+				. "timeout exceeded; " . $this->timeoutMasterInitWait
+				. "sec ($name; $i iteration; arg: [$arg])"
+			);
+			// @codeCoverageIgnoreEnd
+
+			// TODO: Check if child is really not initialized?
+			$code = self::ERR_TIMEOUT_INIT;
+			$msg  = "Exceeded timeout: thread initialization "
+			        ."({$this->timeoutMasterInitWait} sec.)";
+		}
+		// Unknown timeout (should not be called)
+		else {
+			// @codeCoverageIgnoreStart
+			$this->debug && $this->debug(
+				self::D_WARN . "[Timer] Unknown timeout exceeded "
+				. "($name; $i iteration; arg: [$arg])"
+			);
+			// @codeCoverageIgnoreEnd
+
+			// @codeCoverageIgnoreStart
+			$code = self::ERR_OTHER;
+			$msg  = "Unknown timeout ($name; $i iteration; arg: [$arg])";
+			// @codeCoverageIgnoreEnd
+		}
+
+		// Stop worker and set state to WAIT
+		$this->lastErrorCode = $code;
+		$this->lastErrorMsg  = $msg;
+		$this->stopWorker();
+	}
+
+
+	/**
+	 * Debugging for buffer events errors
+	 *
+	 * @see _wEvCbError
+	 * @see _mEvCbError
+	 *
+	 * @param resource $buf   Buffered event
+	 * @param int      $what  Error info
+	 *
+	 * @codeCoverageIgnore Should not be called
+	 */
+	private function evErrorDebug($buf, $what)
+	{
+		$this->debug(sprintf(
+			self::D_WARN . "Pipe read error event [0x%x]; $buf",
+			$what
+		));
+
+		if ($what & EventBuffer::E_EOF) {
+			$this->debug(
+				self::D_WARN . "    Buffer EOF error"
+			);
+		}
+		if ($what & EventBuffer::E_ERROR) {
+			$this->debug(
+				self::D_WARN . "    Buffer common error"
+			);
+		}
+		if ($what & EventBuffer::E_TIMEOUT) {
+			$this->debug(
+				self::D_WARN . "    Buffer timeout error"
+			);
 		}
 	}
 
@@ -1846,7 +2351,7 @@ abstract class Thread
 			);
 
 			// Start event loop with timeout
-			self::$base->loopExit(
+			self::$eventLoop->loopExit(
 				(int)($this->timeoutWorkerJobWait * 1000000)
 			)->loop();
 
@@ -1855,7 +2360,7 @@ abstract class Thread
 				$error = "Can't send packet to parent. Parent "
 				         ."event read confirmation is not received.";
 				$debug && $this->debug(self::D_WARN . $error);
-				self::$base->loopBreak();
+				self::$eventLoop->loopBreak();
 				throw new Exception($error);
 			}
 		}
@@ -1878,6 +2383,15 @@ abstract class Thread
 		$this->masterEvent->write(
 			$this->preparePacket($packet, $data)
 		);
+
+		// Flush (send) the buffer
+		// @codeCoverageIgnoreStart
+		$this->debug && $this->debug(
+			self::D_IPC . "Flush buffer to notify child immidiatly"
+			. " (e{$this->masterEvent->id})"
+		);
+		// @codeCoverageIgnoreEnd
+		self::$eventLoop->loop(EVLOOP_NONBLOCK);
 	}
 
 
@@ -1908,17 +2422,19 @@ abstract class Thread
 		// @codeCoverageIgnoreStart
 		if (!$curPacket && '' != $buffer) {
 			// Should not be called
-			$error = "Unexpected read buffer";
+			$error = "Unexpected read buffer (".strlen($buffer)." bytes)";
 			$debug && $this->debug(self::D_WARN . $error);
-			self::$base->loopBreak();
+			if ($this->isCleaning) {
+				$e->readAllClean();
+				return array();
+			}
+			self::$eventLoop->loopBreak();
 			throw new Exception($error);
 		}
 		// @codeCoverageIgnoreEnd
 
-		$buf = '';
-		while ('' != $str = $e->read($maxReadSize)) {
-			$buf .= $str;
-		}
+		$buf = $e->readAll($maxReadSize);
+
 		// @codeCoverageIgnoreStart
 		if ('' === $buf) {
 			// Should not be called
@@ -1929,23 +2445,35 @@ abstract class Thread
 			. strlen($buffer)."b in buffer"
 		);
 		// @codeCoverageIgnoreEnd
+
+		// TODO: Limit the maximum buffer length?
 		$buffer .= $buf;
-		unset($str, $buf);
+		unset($buf);
 
 
 		$packets = array();
 		do {
 			if (!$curPacket) {
 				// @codeCoverageIgnoreStart
+				// Orphaned buffer (should not be called normally)
 				if ("\x80" !== $buffer[0]) {
-					$error = "Packet must start with 0x80 character";
-				} else if (strlen($buffer) < 7) {
-					$error = "Packet must contain at least 7 characters";
+					$pos = strpos($buffer, "\x80");
+					$debug && $this->debug(
+						self::D_WARN . "Packet must start with 0x80 character ("
+						. strlen($buffer) . " bytes in buffer)"
+						. "; next packet position: " . ($pos === false ? '-' : $pos)
+					);
+					if (false === $pos) {
+						$buffer = '';
+						break;
+					}
+					$buffer = substr($buffer, $pos);
 				}
-				if (!empty($error)) {
-					// Should not be called
+				// Incorrect packet (should not be called)
+				if (strlen($buffer) < 7) {
+					$error = "Packet must contain at least 7 characters";
 					$debug && $this->debug(self::D_WARN . $error);
-					self::$base->loopBreak();
+					self::$eventLoop->loopBreak();
 					throw new Exception($error);
 				}
 				// @codeCoverageIgnoreEnd
@@ -1993,7 +2521,10 @@ abstract class Thread
 				}
 				$buffer = substr($buffer, $_dataLen);
 			} else {
+				// Should not be called
+				// @codeCoverageIgnoreStart
 				$valLen = 0;
+				// @codeCoverageIgnoreEnd
 			}
 
 			// Debugging
@@ -2012,7 +2543,7 @@ abstract class Thread
 				}
 				if (!empty($error)) {
 					$this->debug(self::D_WARN . $error);
-					self::$base->loopBreak();
+					self::$eventLoop->loopBreak();
 					throw new Exception($error);
 				}
 				$this->debug(sprintf(
@@ -2041,38 +2572,15 @@ abstract class Thread
 	/**
 	 * Peeks packet data
 	 *
-	 * @throws Exception
-	 *
-	 * @param mixed $data   Raw data
-	 * @param int   $packet Packet type
+	 * @param mixed $data Raw data
 	 *
 	 * @return string
 	 */
-	private function peekPacketData($data, $packet)
+	private function peekPacketData($data)
 	{
-		$mode = self::$ipcDataMode;
-
-		// Serialization
-		if (($igbinary = self::IPC_IGBINARY === $mode)
-		    || self::IPC_SERIALIZE === $mode
-		) {
-			if (self::P_SERIAL & $packet) {
-				// Igbinary/PHP unserialize
-				$data = $igbinary
-						? igbinary_unserialize($data)
-						: unserialize($data);
-			}
-		} else {
-			// Should not be called
-			// @codeCoverageIgnoreStart
-			$error = "Unknown IPC mode ($mode).";
-			$this->debug(self::D_WARN . $error);
-			self::$base->loopBreak();
-			throw new Exception($error);
-			// @codeCoverageIgnoreEnd
-		}
-
-		return $data;
+		return (self::IPC_IGBINARY === self::$ipcDataMode)
+				? igbinary_unserialize($data)
+				: unserialize($data);
 	}
 
 	/**
@@ -2090,49 +2598,29 @@ abstract class Thread
 	private function preparePacket($packet, $data, $value = '', $toChild = true)
 	{
 		// Prepare data
-		$postfix   = '';
-		if (isset($data)) {
-			$packet |= self::P_DATA;
-			$mode    = self::$ipcDataMode;
-			$postfix = ' (with data)';
-
-			if (($igbinary = self::IPC_IGBINARY === $mode)
-			    || self::IPC_SERIALIZE === $mode
-			) {
-				$packet |= self::P_SERIAL;
-				// Igbinary/PHP serialize
-				$data = $igbinary
+		$data = isset($data)
+				? ((self::IPC_IGBINARY === self::$ipcDataMode)
 						? igbinary_serialize($data)
-						: serialize($data);
-			} else {
-				// Should not be called
-				// @codeCoverageIgnoreStart
-				$error = "Unknown IPC mode ($mode).";
-				$this->debug(self::D_WARN . $error);
-				self::$base->loopBreak();
-				throw new Exception($error);
-				// @codeCoverageIgnoreEnd
-			}
-		} else {
-			$data = '';
-		}
+						: serialize($data))
+				: '';
 
-		// Check value
-		if (0xFF < $valLength = strlen($value = (string)$value)) {
+		// Prepare value
+		$value     = (string)$value;
+		$valLength = strlen($value);
+		if (0xFF < $valLength) {
 			// Should not be called
 			// @codeCoverageIgnoreStart
 			$error = "Packet value is too long ($valLength). "
 			         ."Maximum length is 255 characters.";
 			$this->debug(self::D_WARN . $error);
-			self::$base->loopBreak();
+			self::$eventLoop->loopBreak();
 			throw new Exception($error);
 			// @codeCoverageIgnoreEnd
 		}
 
 		// Build packet
-		$dataLen = strlen($data);
 		$_packet = "\x80"
-					. pack('CCN', $packet, $valLength, $dataLen+$valLength)
+					. pack('CCN', $packet, $valLength, strlen($data)+$valLength)
 					. $value
 					. $data;
 
@@ -2147,12 +2635,14 @@ abstract class Thread
 				$n   = 'parent';
 			}
 			$this->debug(sprintf(
-				"%s     %s Sending packet%s to %s [0x%x]",
-				self::D_IPC, $arr, $postfix, $n, $packet
+				"%s    %s Sending packet%s to %s [0x%x]",
+				self::D_IPC, $arr,
+				'' == $data ? ' (with data)' : '',
+				$n, $packet
 			));
 			$this->debug(sprintf(
-				"%s     %s %d bytes length (%d bytes data and %d bytes value)",
-				self::D_IPC, $arr, strlen($_packet), $dataLen, $valLength
+				"%s    %s %d bytes length (%d bytes data and %d bytes value)",
+				self::D_IPC, $arr, strlen($_packet), strlen($data), $valLength
 			));
 		}
 		// @codeCoverageIgnoreEnd
@@ -2164,28 +2654,35 @@ abstract class Thread
 
 
 
-	#region Signals handling
+	#region POSIX/Unix signals handling
 
 	/**
 	 * Sends signal to parent
 	 *
 	 * @param int $signo Signal's number
 	 *
-	 * @codeCoverageIgnore Called only in child (can't get coverage from another process)
+	 * @return $this
 	 */
-	protected function sendSignalToParent($signo = SIGUSR1)
+	public function sendSignalToParent($signo = SIGUSR1)
 	{
 		$this->sendSignal($signo, $this->parent_pid);
+
+		return $this;
 	}
 
 	/**
 	 * Sends signal to child
 	 *
 	 * @param int $signo Signal's number
+	 *
+	 * @return $this
 	 */
-	protected function sendSignalToChild($signo = SIGUSR1)
+	public function sendSignalToChild($signo = SIGUSR1)
 	{
-		$this->sendSignal($signo, $this->child_pid);
+		if ($this->isForked) {
+			$this->sendSignal($signo, $this->child_pid);
+		}
+		return $this;
 	}
 
 	/**
@@ -2201,7 +2698,7 @@ abstract class Thread
 	{
 		// @codeCoverageIgnoreStart
 		if ($this->debug) {
-			$name = Base::signalName($signo);
+			$signame = Base::getSignalName($signo);
 			if ($pid === $this->child_pid) {
 				$arrow = '=>';
 				$n     = 'child';
@@ -2211,7 +2708,7 @@ abstract class Thread
 			}
 			$this->debug(
 				self::D_IPC . " $arrow Sending signal to the "
-				."$n - $name ($signo) ($this->pid => $pid)"
+				."$n - $signame ($signo) ($this->pid => $pid)"
 			);
 		}
 		// @codeCoverageIgnoreEnd
@@ -2221,7 +2718,7 @@ abstract class Thread
 
 
 	/**
-	 * Registers event handlers for all POSIX signals
+	 * Registers event handlers for all POSIX/Unix signals
 	 *
 	 * @param bool $allSignals [optional] <p>
 	 * Whether to register handlers for all signals
@@ -2229,19 +2726,12 @@ abstract class Thread
 	 * child is dead).
 	 * </p>
 	 *
+	 * @see Base::$signals
+	 *
 	 * @throws Exception if signal events are already registered
 	 */
 	private function registerEventSignals($allSignals = true)
 	{
-		if (self::$eventsSignals) {
-			// Should not be called
-			// @codeCoverageIgnoreStart
-			throw new Exception(
-				'Signal events are already registered'
-			);
-			// @codeCoverageIgnoreEnd
-		}
-
 		/**
 		 * Basically we register event handlers for all POSIX signals.
 		 * In other case we need at least SIGCHLD handler to
@@ -2251,31 +2741,41 @@ abstract class Thread
 
 		/**
 		 * Different callbacks for parent and child process
+		 *
+		 * @var callable $cb
 		 */
-		$cb = $this->isChild
+		$class = get_called_class();
+		$cb    = $this->isChild
 				? array($this, '_evCbSignal')
-				: array(get_called_class(), '_mEvCbSignal');
+				: array($class, '_mEvCbSignal');
 
-		$base = self::$base;
-		$i    = 0;
-
-		foreach ($signals as $signo => $name) {
-			// Ignore SIGKILL and SIGSTOP - we can not handle them.
-			if ($signo === SIGKILL || $signo === SIGSTOP) {
-				continue;
-			}
-			$ev = new Event();
-			$ev->setSignal($signo, $cb)
-				->setBase($base)
-				->add();
-			self::$eventsSignals[$signo] = $ev;
-			$i++;
+		// Prepare slot
+		if (empty(self::$eventsSignals[$slotName = (int)!$this->isChild])) {
+			self::$eventsSignals[$slotName] = array();
 		}
 
+		$i    = 0;
+		$base = self::$eventLoop;
+		foreach ($signals as $signo => $name) {
+			// Ignore SIGKILL and SIGSTOP - we can not handle them.
+			if (SIGKILL === $signo || SIGSTOP === $signo) {
+				continue;
+			}
+
+			// If handler is not already registered
+			else if (!isset(self::$eventsSignals[$slotName][$signo])) {
+				self::$eventsSignals[$slotName][$signo] = $ev = new Event();
+				$ev->setSignal($signo, $cb)->setBase($base)->add();
+				$i++;
+			}
+		}
+
+		// @codeCoverageIgnoreStart
 		/** @noinspection PhpUndefinedVariableInspection */
-		$this->debug(
-			self::D_INIT . "Signals event handlers registered ($i, last - $name)"
+		$this->debug && $this->debug(
+			self::D_INIT . "Signals event handlers are registered ($i, last - $name)"
 		);
+		// @codeCoverageIgnoreEnd
 	}
 
 
@@ -2292,37 +2792,41 @@ abstract class Thread
 	 */
 	public function _evCbSignal($fd, $events, $arg)
 	{
-		// Signal's number
-		$signo = $arg[2];
+		// Signal's number and name
+		$signo   = $arg[2];
+		$signame = Base::getSignalName($signo);
 
-		// Settings
-		$name = Base::signalName($signo, $found);
-		if ($debug = $this->debug) {
-			$prefix = $this->isChild ? '=>' : '<=';
-			$this->debug(
-				self::D_IPC . " {$prefix} Caught $name ($signo) signal"
-			);
-		}
+		($debug = $this->debug) && $this->debug(
+			self::D_IPC . " => Caught $signame ($signo) signal in child; "
+			. "Event code [".sprintf('0x%x',$events)."]; descriptor [$fd]"
+		);
 
 		// Handler
-		if (method_exists($this, $name)) {
-			$this->$name($signo);
+		if (method_exists($this, $signame)) {
+			$debug && $this->debug(
+				self::D_IPC . "    <= Signal  $signame ($signo) has handler, call..."
+			);
+			$this->$signame($signo);
 		}
 
 		// Skipped signals:
 		//  SIGCHLD  - Child processes terminates or stops
 		//  SIGWINCH - Window size change
 		//  SIGINFO  - Information request
-		else if (SIGCHLD === $signo || SIGWINCH === $signo || 28 === $signo) {
-			return;
+		else if (SIGCHLD === $signo || SIGWINCH === $signo
+		         || 28 /* SIGINFO */ === $signo
+		) {
+			$debug && $this->debug(
+				self::D_IPC . "    => Skip $signame ($signo) signal"
+			);
 		}
 
 		// Default action - shutdown
 		else {
 			$debug && $this->debug(
-				self::D_INFO . 'Unhandled signal, exiting'
+				self::D_WARN . "Unhandled signal $signame ($signo), exiting"
 			);
-			self::$base->loopBreak();
+			self::$eventLoop->loopBreak();
 			$this->shutdown();
 		}
 	}
@@ -2335,85 +2839,116 @@ abstract class Thread
 	 * @param null  $fd
 	 * @param int   $events
 	 * @param array $arg
+	 *
+	 * @throws Exception
 	 */
 	public static function _mEvCbSignal($fd, $events, $arg)
 	{
-		// Signal's number
-		$signo = $arg[2];
-
-		// Settings
-		$name = Base::signalName($signo);
+		// Signal's number and name
+		$signo   = $arg[2];
+		$signame = Base::getSignalName($signo);
 
 		// @codeCoverageIgnoreStart
-		if ($debug = self::stGetDebug($thread)) {
-			$prefix = $thread->isChild ? '=>' : '<=';
-			self::stDebug(
-				self::D_IPC . " {$prefix} Caught $name ($signo) signal",
-				$thread
-			);
-		}
+		($debug = self::stGetDebug()) && self::stDebug(
+			self::D_IPC . " <= Caught $signame ($signo) signal in parent; "
+				. "Event code [".sprintf('0x%x',$events)."]; descriptor [$fd]",
+			true
+		);
 		// @codeCoverageIgnoreEnd
 
-		$name  = "m{$name}";
-		$class = get_called_class();
+		// Special SIGCHLD handler - for terminated child processes.
+		$handled = false;
+		if (SIGCHLD === $signo) {
+			// Get forked childs status
+			while (0 < $pid = pcntl_waitpid(-1, $status, WNOHANG|WUNTRACED)) {
+				// @codeCoverageIgnoreStart
+				$debug && self::stDebug(
+					self::D_IPC . "    <= SIGCHLD is for pid #{$pid}."
+						. " exit code: " . pcntl_wexitstatus($status),
+					true
+				);
+				// @codeCoverageIgnoreEnd
 
-		// Handler
-		if ($exists = method_exists($class, $name)) {
-			$class::$name($signo);
+				// Looking for a thread by PID
+				if (isset(self::$threadsByPids[$pid])
+					&& isset(self::$threads[$threadId = self::$threadsByPids[$pid]])
+				) {
+					$thread = self::$threads[$threadId];
+
+					// @codeCoverageIgnoreStart
+					$debug && self::stDebug(
+						self::D_IPC . "    <= SIGCHLD is for thread #{$threadId}",
+						$thread
+					);
+					// @codeCoverageIgnoreEnd
+
+					// Stop worker and set state to WAIT
+					$thread->lastErrorCode = self::ERR_DEATH;
+					$thread->lastErrorMsg  = "Worker is dead";
+					$thread->stopWorker();
+				}
+
+				// Thread is not found
+				// @codeCoverageIgnoreStart
+				else if ($debug) {
+					$debug && self::stDebug(
+						self::D_WARN . "    <= SIGCHLD target thread is not found",
+						true
+					);
+				}
+				// @codeCoverageIgnoreEnd
+			}
+			$handled = true;
+			// @codeCoverageIgnoreStart
+			$debug && self::stDebug(
+				self::D_IPC . "    <= SIGCHLD handled",
+				true
+			);
+			// @codeCoverageIgnoreEnd
+		}
+
+		// Call defined signal handlers
+		$method  = "m{$signame}";
+		foreach (self::$threadsByClasses as $threadClass => $threads) {
+			if (method_exists($threadClass, $method)) {
+				// @codeCoverageIgnoreStart
+				$debug && self::stDebug(
+					self::D_IPC . "    <= Signal ($signame) has handler, call... (class $threadClass)",
+					true
+				);
+				// @codeCoverageIgnoreEnd
+				$threadClass::$method($signo);
+				$handled = true;
+			}
+		}
+
+		// Signal is handled, return
+		if ($handled) {
+			return;
 		}
 
 		// Skipped signals:
 		//  SIGWINCH - Window size change
 		//  SIGINFO  - Information request
-		else if (SIGWINCH === $signo || 28 === $signo) {
+		else if (SIGWINCH === $signo || 28 /* SIGINFO */ === $signo) {
+			// @codeCoverageIgnoreStart
+			$debug && self::stDebug(
+				self::D_IPC . "    <= Skip unhandled $signame ($signo) signal. ",
+				true
+			);
+			// @codeCoverageIgnoreEnd
 			return;
 		}
 
-		// Default action - shutdown
-		else {
-			// Should not be called
-			// @codeCoverageIgnoreStart
-			$debug && self::stDebug(
-				self::D_INFO . 'Unhandled signal, exiting',
-				$thread
-			);
-			self::$base->loopBreak();
-			exit;
-			// @codeCoverageIgnoreEnd
-		}
-	}
-
-
-	/**
-	 * Master SIGCHLD handler - Child processes terminates or stops.
-	 */
-	protected static function mSigChld()
-	{
-		$debug = self::stGetDebug($thread);
-		while (0 < $pid = pcntl_waitpid(-1, $status, WNOHANG|WUNTRACED)) {
-			// @codeCoverageIgnoreStart
-			$debug && self::stDebug(
-				self::D_INFO . "SIGCHLD is for pid #{$pid}",
-				$thread
-			);
-			// @codeCoverageIgnoreEnd
-
-			if ($pid > 0 && isset(self::$threadsByPids[$pid])) {
-				if (isset(self::$threads[$threadId = self::$threadsByPids[$pid]])) {
-					$thread = self::$threads[$threadId];
-
-					// @codeCoverageIgnoreStart
-					$debug && self::stDebug(
-						self::D_INFO . "SIGCHLD is for thread #{$threadId}",
-						$thread
-					);
-					// @codeCoverageIgnoreEnd
-
-					$thread->cleaning
-						|| $thread->stopWorker();
-				}
-			}
-		}
+		// Default action - shutdown (normally should not be called)
+		// @codeCoverageIgnoreStart
+		$debug && self::stDebug(
+			self::D_WARN . "Unhandled signal $signame ($signo), exiting",
+			true
+		);
+		self::$eventLoop->loopBreak();
+		exit;
+		// @codeCoverageIgnoreEnd
 	}
 
 	#endregion
@@ -2423,21 +2958,24 @@ abstract class Thread
 	#region Shutdown
 
 	/**
-	 * Attempts to stop the thread worker process
+	 * Attempts to stop the thread worker process.
+	 * Sets thread state to WAIT.
 	 *
-	 * @param bool $wait
-	 * @param int  $signo - SIGINT|SIGTSTP|SIGTERM|SIGSTOP|SIGKILL
+	 * @param bool $wait  Whether to wait for child death
+	 * @param int  $signo SIGINT|SIGTSTP|SIGTERM|SIGSTOP|SIGKILL
 	 *
-	 * @return bool TRUE on success and FALSE otherwise
+	 * @return bool FALSE if worker is already stopped TRUE otherwise
 	 */
 	protected function stopWorker($wait = false, $signo = SIGTERM)
 	{
-		$res = false;
+		// Stop worker
+		$debug = $this->debug;
+		$res   = false;
 		if ($this->isForked) {
 			if ($this->isAlive()) {
 				// @codeCoverageIgnoreStart
-				if ($debug = $this->debug) {
-					$do = (SIGSTOP == $signo || SIGKILL == $signo)
+				if ($debug) {
+					$do = (SIGKILL == $signo || SIGSTOP == $signo)
 							? 'Kill'
 							: 'Stop';
 					$this->debug(
@@ -2446,15 +2984,14 @@ abstract class Thread
 				}
 				// @codeCoverageIgnoreEnd
 				$this->sendSignalToChild($signo);
+				// @codeCoverageIgnoreStart
 				if ($wait) {
-					// @codeCoverageIgnoreStart
 					$debug && $this->debug(
 						self::D_INFO . 'Waiting for the child'
 					);
-					// @codeCoverageIgnoreEnd
 					$pid = $this->child_pid;
 					// TODO: Always check that child is really dead (with timeout)?
-					if (SIGSTOP == $signo) {
+					if (SIGSTOP === $signo) {
 						$i = 15;
 						usleep(1000);
 						do {
@@ -2467,11 +3004,9 @@ abstract class Thread
 							usleep(100000);
 						} while (--$i > 0);
 						if (!$st) {
-							// @codeCoverageIgnoreStart
 							$debug && $this->debug(
 								self::D_INFO . 'Waiting failed.. kill child'
 							);
-							// @codeCoverageIgnoreEnd
 							return $this->stopWorker(
 								true, SIGKILL
 							);
@@ -2482,13 +3017,43 @@ abstract class Thread
 						);
 					}
 				}
+				// @codeCoverageIgnoreEnd
 				$res = true;
 			}
+			// @codeCoverageIgnoreStart
+			else if ($debug) {
+				$this->debug(
+					self::D_INFO . 'Worker is already stopped'
+				);
+			}
+			// @codeCoverageIgnoreEnd
+
+			// Cleanup
 			$this->isForked = false;
+			unset(self::$threadsByPids[$this->child_pid]);
+			$this->child_pid = $this->pid;
 		}
-		if (!$this->cleaning) {
+
+		// Cleanup. Buffered event can be damaged after child death
+		if ($e = $this->masterEvent) {
+			$e->readAllClean();
+			$e->free();
+
+			// @codeCoverageIgnoreStart
+			$debug && $this->debug(
+				self::D_INFO . 'Master pipe read event cleaned'
+				. " (e{$e->id})"
+			);
+			// @codeCoverageIgnoreEnd
+
+			$this->masterEvent = null;
+		}
+
+		// Enable waiting state
+		if (!$this->isCleaning) {
 			$this->setState(self::STATE_WAIT);
 		}
+
 		return $res;
 	}
 
@@ -2501,7 +3066,9 @@ abstract class Thread
 	 */
 	protected function killWorker($wait = false)
 	{
+		// @codeCoverageIgnoreStart
 		return $this->stopWorker($wait, SIGKILL);
+		// @codeCoverageIgnoreEnd
 	}
 
 
@@ -2516,9 +3083,12 @@ abstract class Thread
 	{
 		if ($this->isChild) {
 			// On shutdown hook
+			($debug = $this->debug) && $this->debug(
+				self::D_INIT . "Call on shutdown hook"
+			);
 			$this->onShutdown();
 
-			$this->debug(self::D_INFO . 'Child exit');
+			$debug && $this->debug(self::D_INFO . 'Child exit (shutdown)');
 			$this->cleanup();
 
 			// TODO: Event dispatcher call for shutdown?
@@ -2548,33 +3118,41 @@ abstract class Thread
 	/**
 	 * Static debug logging
 	 *
-	 * @param string $message
-	 * @param self   $thread
+	 * @param string      $message
+	 * @param Thread|bool $thread  Set to true for non-one-thread debug
 	 */
 	protected static function stDebug($message, $thread = null)
 	{
-		// Get thread id
-		if ($thread) {
+		// Get thread id (and check debug mode)
+		// @codeCoverageIgnoreStart
+		if (true === $thread) {
+			$id = '*';
+		} else if ($thread) {
 			$id = $thread->id;
 		} else if (self::stGetDebug($thread)) {
-			// @codeCoverageIgnoreStart
 			$id = '-';
 		} else {
 			return;
-			// @codeCoverageIgnoreEnd
 		}
+		// @codeCoverageIgnoreEnd
 
 		// Prepare message
 		$time = Base::getTimeForLog();
-		if ($thread) {
-			$role = $thread->isChild ? 'W' : '-'; // Master|Worker
-			$pid  = $thread->pid;
+		if (true === $thread) {
+			// non-one-thread debug
+			// @codeCoverageIgnoreStart
+			$role = '-';
+			// @codeCoverageIgnoreEnd
+		} else if ($thread) {
+			// Master|Worker
+			$role = $thread->isChild ? 'W' : '-';
 		} else {
 			// Unknown (called in destructor or something similar)
 			// @codeCoverageIgnoreStart
-			$role = $pid = '~';
+			$role = '~';
 			// @codeCoverageIgnoreEnd
 		}
+		$pid = posix_getpid();
 		$message = "<small>{$time} [debug] [T{$id}.{$role}] "
 		           ."#{$pid}:</> <info>{$message}</>";
 
@@ -2589,7 +3167,7 @@ abstract class Thread
 			// @codeCoverageIgnoreEnd
 			echo preg_replace(
 				'~<(?:/?[a-z][a-z0-9_=;-]+|/)>~Si', '', $message
-			), PHP_EOL;
+			) . PHP_EOL;
 			@ob_flush();
 			@flush();
 		}
@@ -2597,8 +3175,6 @@ abstract class Thread
 
 	/**
 	 * Returns instance debug status for static calls
-	 *
-	 * @throws Exception
 	 *
 	 * @param Thread $thread
 	 *
@@ -2609,12 +3185,18 @@ abstract class Thread
 		static $debug;
 
 		if (empty(self::$threadsByClasses[$class = get_called_class()])) {
-			// Couldn't find threads of type $class
-			// Called in destructor or something similar
-			return $debug;
+			if (!self::$threads) {
+				// Couldn't find threads of type $class
+				// Called in destructor or something similar
+				// @codeCoverageIgnoreStart
+				return $debug;
+				// @codeCoverageIgnoreEnd
+			}
+			$thread = end(self::$threads);
+		} else {
+			$thread = end(self::$threadsByClasses[$class]);
 		}
 
-		$thread = end(self::$threadsByClasses[$class]);
 		return $debug = $thread->debug;
 	}
 

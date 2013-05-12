@@ -4,6 +4,45 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+11.05.2013
+- **IMPROVED:** Full code coverage (amal)
+- **IMPROVED:** Speedup in IPC. Overall, IPC accelerated by 15-50% compared with the v1.0 release (amal)
+- **FIXED:** Job identifier added to discard orphaned results (amal)
+- **MINOR:** Small typo fix (amal)
+
+09.05.2013
+- **MINOR:** Error callbacks for buffer events (amal)
+
+05.05.2013
+- **FIXED:** Discarding of duplicate job packets. This could occur when the worker dies (amal)
+
+04.05.2013
+- **FIXED:** Thread can no longer start new job while result of previous is not fetched (amal)
+- **MINOR:** More tests for sync mode, better groups of tests (amal)
+- **FIXED:** Confirmed bug fix for resources damage with child death (Issue #2, amal)
+
+03.05.2013
+- **IMPROVED:** Thread pool structure API improvements (amal)
+
+28.04.2013
+- **CHANGED:** Debug flag moved to the end of arguments list in pool and thread constructors (amal)
+
+27.04.2013
+- **FIXED:** Master pipe read event cleanup after worker death added (cause can be damaged) (amal)
+- **IMPROVED:** New tests, better feature and code coverage (amal)
+- **CHANGED:** Main processing errors handling now works without exceptions (amal)
+- **FIXED:** Removed incorrect event loop cleanup in some cases (amal)
+
+26.04.2013
+- **CHANGED:** More thoughtful public getters instead of public/protected properties (amal)
+- **MINOR:** Better PhpDocs and some code reorganization (amal)
+- **IMPROVED:** Added cleanup for all other (redundant) threads and pools in child after forking (amal)
+
+25.04.2013
+- **FIXED:** Signal handler in master process with many different threads now works normally (amal)
+- **FIXED:** Confirmation mode (eventLocking) for worker events fixed (amal)
+- **MINOR:** Debugging improvements. PID update for every call, more data in logs (amal)
+
 21.04.2013
 - **MINOR:** Many new tests, better feature and code coverage (amal)
 - **MINOR:** Many small optimizations, improvements and code cleanup (amal)
@@ -21,7 +60,7 @@ CHANGELOG
 - **FIXED:** Fixed issue with exceptions in events triggering (amal)
 
 13.04.2013
-- **FIXED:** `Thread::onFork` hook is now properly called in child after forking (amal)
+- **FIXED:** `Thread::onFork` hook is now properly called in child after forking (Issue #7, amal)
 - **MINOR:** Small thread improvements with code cleanup and refactoring (amal)
 - **MINOR:** Unit tests structure improvements (amal)
 

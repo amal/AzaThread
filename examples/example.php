@@ -6,6 +6,7 @@ use Aza\Components\Thread\Thread;
 use Aza\Components\Thread\ThreadPool;
 
 require __DIR__ . '/../vendor/autoload.php';
+//require __DIR__ . '/../../../../example.bootstrap.php';
 
 
 /**
@@ -29,7 +30,7 @@ class TestThreadReturnFirstArgument extends Thread
 	 *
 	 * @return mixed
 	 */
-	protected function process()
+	function process()
 	{
 		return $this->getParam(0);
 	}
@@ -47,7 +48,7 @@ class TestThreadEvents extends Thread
 	 *
 	 * @return mixed
 	 */
-	protected function process()
+	function process()
 	{
 		$events = $this->getParam(0);
 		for ($i = 0; $i < $events; $i++) {
@@ -155,8 +156,9 @@ do {
 		// Error handling here
 		// processing is not successful if thread dies
 		// when worked or working timeout exceeded
-		foreach ($failed as $threadId) {
-			echo "error (thread $threadId)", PHP_EOL;
+		foreach ($failed as $threadId => $err) {
+			list($errorCode, $errorMessage) = $err;
+			echo "error (thread $threadId): #$errorCode - $errorMessage", PHP_EOL;
 			$left++;
 		}
 	}
@@ -199,9 +201,11 @@ do {
 		// Error handling here
 		// processing is not successful if thread dies
 		// when worked or working timeout exceeded
-		foreach ($failed as $threadId) {
+		foreach ($failed as $threadId => $err) {
+			list($errorCode, $errorMessage) = $err;
 			$jobs[] = $started[$threadId];
-			echo "error: {$started[$threadId]} (thread $threadId)", PHP_EOL;
+			echo "error: {$started[$threadId]} ",
+				"(thread $threadId): #$errorCode - $errorMessage", PHP_EOL;
 			unset($started[$threadId]);
 			$left++;
 		}

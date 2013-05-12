@@ -10,7 +10,6 @@ use Aza\Components\Thread\ThreadPool;
 use InvalidArgumentException;
 use PHPUnit_Framework_TestCase as TestCase;
 use ReflectionMethod;
-use ReflectionProperty;
 
 /**
  * Testing thread system
@@ -170,11 +169,11 @@ class ThreadTest extends TestCase
 
 
 		// Non-closure test
-		$thread = new TestThreadEvents($debug);
+		$thread = new TestThreadEvents(null, null, $debug);
 
 		$thread->bind(
 			TestThreadEvents::EV_PROCESS,
-			array($this, 'processEvent')
+			array($this, 'processEventCallback')
 		);
 
 		$count = $this->getCount();
@@ -185,6 +184,18 @@ class ThreadTest extends TestCase
 		$this->assertTrue($thread->getSuccess());
 
 		$thread->cleanup();
+	}
+
+	/**
+	 * Errorable thread test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadErrorable()
+	{
+		Thread::$useForks = false;
+		$this->processThreadErrorable(false);
 	}
 
 	/**
@@ -199,6 +210,7 @@ class ThreadTest extends TestCase
 		$this->processThreadArgumentsMapping(false);
 	}
 
+
 	/**
 	 * Simple thread pool test (sync mode)
 	 *
@@ -209,6 +221,18 @@ class ThreadTest extends TestCase
 	{
 		Thread::$useForks = false;
 		$this->processPool(false);
+	}
+
+	/**
+	 * Additional thread pool test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPool2()
+	{
+		Thread::$useForks = false;
+		$this->processPool2(false);
 	}
 
 	/**
@@ -264,18 +288,69 @@ class ThreadTest extends TestCase
 		// Non-closure test
 		$pool = new ThreadPool(
 			__NAMESPACE__ . '\TestThreadEvents',
-			1, null, $debug
+			1, null, null, $debug
 		);
 
 		$pool->bind(
 			TestThreadEvents::EV_PROCESS,
-			array($this, 'processEvent')
+			array($this, 'processEventCallback')
 		);
 
-		$pool->run(1);
+		$threadId = $pool->run(1);
+		$this->assertNotEmpty($threadId);
+
 		$pool->wait();
 
 		$pool->cleanup();
+	}
+
+	/**
+	 * Errorable thread pool test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolErrorable()
+	{
+		Thread::$useForks = false;
+		$this->processPoolErrorable(false);
+	}
+
+	/**
+	 * Thread pool test with external stop (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadPoolErrorableExternal()
+	{
+		Thread::$useForks = false;
+		$this->processPoolErrorableExternal(false);
+	}
+
+
+	/**
+	 * Test for exception in events triggering (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncExceptionInEventListener()
+	{
+		Thread::$useForks = false;
+		$this->processExceptionInEventListener(false);
+	}
+
+	/**
+	 * Two different threads test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncTwoDifferentThreads()
+	{
+		Thread::$useForks = false;
+		$this->processTwoDifferentThreads(false);
 	}
 
 	#endregion
@@ -288,6 +363,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -297,7 +373,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false);
-		});
+		}, true);
 	}
 
 	/**
@@ -305,6 +381,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -314,7 +391,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false, true);
-		});
+		}, true);
 	}
 
 	/**
@@ -322,6 +399,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -331,7 +409,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false, false, true);
-		});
+		}, true);
 	}
 
 	/**
@@ -339,6 +417,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -348,7 +427,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false, true, true);
-		}, true);
+		});
 	}
 
 	/**
@@ -356,6 +435,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -365,7 +445,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThreadEvent(false);
-		});
+		}, true);
 	}
 
 	/**
@@ -373,6 +453,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -382,14 +463,34 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThreadErrorable(false);
-		});
+		}, true);
 	}
+
+	/**
+	 * Thread arguments mapping test (sync mode)
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadArgumentsMapping()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThreadArgumentsMapping(false);
+		}, true);
+	}
+
 
 	/**
 	 * Simple thread pool test
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -400,64 +501,24 @@ class ThreadTest extends TestCase
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processPool(false);
 		}, true);
+	}
 
-
-		// Some other pool tests
-		$threads = 2;
-		$thread  = __NAMESPACE__ . '\TestThreadReturnAllArguments';
-		$pool    = new ThreadPool($thread, $threads);
-
-		$state = $pool->getState();
-		$this->assertSame($threads, count($state));
-		foreach ($state as $s) {
-			$this->assertSame('INIT', $s);
-		}
-
-		$this->assertFalse($pool->run());
-		$this->assertFalse($pool->run('example'));
-
-		$data = array(
-			array(),
-			array(1),
-			array(1, 2),
-			array(1, 2, 3),
-			array(1, 2, 3, 4),
-			array(1, 2, 3, 4, 5),
-		);
-		$jobs   = array();
-		$i      = 0;
-		$num    = count($data);
-		$left   = $num;
-		$maxI   = ceil($num * 1.5);
-		$worked = array();
-		do {
-			while ($pool->hasWaiting() && $left > 0) {
-				$args = array_shift($data);
-				if (!$threadId = call_user_func_array(array($pool, 'run'), $args)) {
-					throw new Exception('Pool slots error');
-				}
-				$this->assertTrue(!isset($jobs[$threadId]));
-				$jobs[$threadId] = $args;
-				$worked[$threadId] = true;
-				$left--;
-			}
-			if ($results = $pool->wait()) {
-				foreach ($results as $threadId => $res) {
-					$this->assertTrue(isset($jobs[$threadId]));
-					$this->assertEquals($jobs[$threadId], $res);
-					unset($jobs[$threadId]);
-					$num--;
-				}
-			}
-			$i++;
-		} while ($num > 0 && $i < $maxI);
-
-		$pool->cleanup();
-
-		$this->assertSame(0, $num);
-
-		$state = $pool->getState();
-		$this->assertSame(0, count($state));
+	/**
+	 * Additional thread pool test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group pool
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadPool2()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processPool2(false);
+		}, true);
 	}
 
 	/**
@@ -465,6 +526,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -482,6 +544,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -499,6 +562,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -508,7 +572,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processPool(false, true, true);
-		}, true);
+		});
 	}
 
 	/**
@@ -516,6 +580,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -525,7 +590,7 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processPoolEvent(false);
-		}, true);
+		});
 	}
 
 	/**
@@ -533,6 +598,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group pool
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -542,28 +608,35 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processPoolErrorable(false);
-		}, true);
+		});
 	}
 
 	/**
-	 * Thread arguments mapping test (sync mode)
+	 * Thread pool test with external stop (for issue)
 	 *
 	 * @author amal
-	 * @group unit
+	 * @group integrational
+	 * @group pool
+	 * @ticket GitHub Anizoptera/AzaThread/#2
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
 	 */
-	public function testThreadArgumentsMapping()
+	public function testThreadPoolErrorableExternal()
 	{
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
-			$testCase->processThreadArgumentsMapping(false);
-		}, true);
+			$testCase->processPoolErrorableExternal(false);
+		});
 	}
+
 
 	/**
 	 * Test for exception in events triggering
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group thread
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -572,41 +645,150 @@ class ThreadTest extends TestCase
 	{
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
-			$thread = new TestThreadEvents();
-
-			$thread->bind(
-				TestThreadEvents::EV_PROCESS,
-				function($event, $e_data, $e_arg) use ($testCase) {
-					$testCase->assertSame(null, $e_arg);
-					$testCase->assertSame(TestThreadEvents::EV_PROCESS, $event);
-					$testCase->assertEquals(0, $e_data);
-
-					throw new InvalidArgumentException('Example Message');
-				}
-			);
-
-			try {
-				$thread->wait()->run(1)->wait();
-			} catch (InvalidArgumentException $e) {
-				/** @var $testCase TestCase */
-				$catched = true;
-				$testCase->assertTrue($e instanceof InvalidArgumentException);
-				$testCase->assertContains(
-					'Example Message', $e->getMessage()
-				);
-				unset($e);
-			}
-			$testCase->assertFalse(empty($catched));
-
-			$thread->cleanup();
+			$testCase->processExceptionInEventListener(false);
 		}, true);
 	}
+
+	/**
+	 * Two different threads test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testTwoDifferentThreads()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processTwoDifferentThreads(false);
+		});
+	}
+
+	/**
+	 * POSIX signals handling test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testSignalsHandling()
+	{
+		$debug    = false;
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase, $debug) {
+			if ($debug) {
+				echo '----------------------------', PHP_EOL,
+				"POSIX signals handling test ", PHP_EOL,
+				'----------------------------', PHP_EOL;
+			}
+
+
+			// Random thread init, to test handling of signals for different threads
+			$t = new TestThreadReturnFirstArgument(
+				null, null, $debug
+			);
+
+
+			TestSignalsHandling::$catchedSignalsInParent = $counter = 0;
+			$testCase->assertSame($counter, TestSignalsHandling::$catchedSignalsInParent);
+
+
+			$thread = new TestSignalsHandling('SignalsHandling', null, $debug);
+			$thread->wait();
+
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$testCase->assertSame(0, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+
+			$thread->sendSignalToChild(SIGUSR1);
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$testCase->assertSame(1, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+
+			$thread->sendSignalToChild(SIGUSR1);
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$testCase->assertSame(2, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+
+			$thread->sendSignalToChild(SIGUSR1);
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$testCase->assertSame(3, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+
+			$thread->sendSignalToParent(SIGWINCH);
+			$thread->sendSignalToParent(SIGCHLD);
+
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
+			$thread->cleanup();
+
+
+			$thread = new TestSignalsHandling(null, null, $debug);
+			$thread->wait()->sendSignalToChild(SIGUSR1);
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$testCase->assertSame(1, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
+			$thread->cleanup();
+
+
+			$thread = new TestSignalsHandling(null, null, $debug);
+			$thread->sendSignalToChild(SIGUSR1)->wait();
+			$catchedSignals = (int)$thread->run()->wait()->getResult();
+			$expectedCatchedSignals = 0;
+			if ($catchedSignals !== $expectedCatchedSignals) {
+				// Can be sometimes - it's normal
+				$expectedCatchedSignals++;
+			}
+			$testCase->assertSame($expectedCatchedSignals, $catchedSignals);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
+			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
+			$thread->cleanup();
+
+
+			$t->cleanup();
+			unset($counter);
+		});
+	}
+
+	/**
+	 * Thread events with locking test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithEventsAndLocking()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThreadEvent(false, true);
+		});
+	}
+
 
 	/**
 	 * Prefork wait timeout test
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group timeout
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -622,20 +804,25 @@ class ThreadTest extends TestCase
 				'-------------------------', PHP_EOL;
 			}
 
-			try {
-				$thread = new TestPreforkWaitTimeout($debug);
-			} catch (Exception $e) {
-				/** @var $testCase TestCase */
-				$catched = true;
-				$testCase->assertTrue($e instanceof Exception);
-				$testCase->assertContains(
-					'Exceeded timeout: thread initialization',
-					$e->getMessage()
-				);
-				unset($e);
-			}
-			$testCase->assertFalse(empty($catched));
-			$testCase->assertTrue(empty($thread));
+			$thread = new TestPreforkWaitTimeout(
+				null, null, $debug
+			);
+
+			$testCase->assertFalse($thread->getSuccess());
+			$testCase->assertSame(
+				Thread::ERR_TIMEOUT_INIT,
+				$thread->getLastErrorCode()
+			);
+			$testCase->assertContains(
+				'Exceeded timeout: thread initialization',
+				$thread->getLastErrorMsg()
+			);
+			$testCase->assertSame(
+				Thread::STATE_WAIT,
+				$thread->getState()
+			);
+
+			$thread->cleanup();
 		}, true);
 	}
 
@@ -644,6 +831,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group timeout
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -659,24 +847,24 @@ class ThreadTest extends TestCase
 				'-------------------------', PHP_EOL;
 			}
 
-			try {
-				$thread = new TestResultWaitTimeout($debug);
-				$thread->wait()->run()->wait();
-			} catch (Exception $e) {
-				/** @var $testCase TestCase */
-				$catched = true;
-				$testCase->assertTrue($e instanceof Exception);
-				$testCase->assertContains(
-					'Exceeded timeout: thread work',
-					$e->getMessage()
-				);
-				unset($e);
-			}
+			$thread = new TestResultWaitTimeout(
+				null, null, $debug
+			);
+			$thread->wait()->run()->wait();
 
-			$testCase->assertFalse(empty($catched));
-			$testCase->assertFalse(empty($thread));
 			$testCase->assertFalse($thread->getSuccess());
-			$testCase->assertSame(Thread::STATE_WAIT, $thread->getState());
+			$testCase->assertSame(
+				Thread::ERR_TIMEOUT_RESULT,
+				$thread->getLastErrorCode()
+			);
+			$testCase->assertContains(
+				'Exceeded timeout: thread work',
+				$thread->getLastErrorMsg()
+			);
+			$testCase->assertSame(
+				Thread::STATE_WAIT,
+				$thread->getState()
+			);
 
 			$thread->cleanup();
 		}, true);
@@ -687,6 +875,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group timeout
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -698,11 +887,13 @@ class ThreadTest extends TestCase
 		$this->processAsyncTest(function() use ($testCase, $debug) {
 			if ($debug) {
 				echo '-------------------------', PHP_EOL,
-				"Job wait timeout test ", PHP_EOL,
+				"Job wait (by worker) timeout test ", PHP_EOL,
 				'-------------------------', PHP_EOL;
 			}
 
-			$thread = new TestJobWaitTimeout($debug);
+			$thread = new TestJobWaitTimeout(
+				null, null, $debug
+			);
 
 			// To certainly meet the timeout
 			usleep(2);
@@ -710,7 +901,18 @@ class ThreadTest extends TestCase
 			$thread->wait()->run()->wait();
 
 			$testCase->assertFalse($thread->getSuccess());
-			$testCase->assertSame(Thread::STATE_WAIT, $thread->getState());
+			$testCase->assertSame(
+				Thread::ERR_DEATH,
+				$thread->getLastErrorCode()
+			);
+			$testCase->assertContains(
+				'Worker is dead',
+				$thread->getLastErrorMsg()
+			);
+			$testCase->assertSame(
+				Thread::STATE_WAIT,
+				$thread->getState()
+			);
 
 			$thread->cleanup();
 		}, true);
@@ -721,6 +923,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @author amal
 	 * @group integrational
+	 * @group timeout
 	 *
 	 * @requires extension posix
 	 * @requires extension pcntl
@@ -736,56 +939,49 @@ class ThreadTest extends TestCase
 				'-------------------------', PHP_EOL;
 			}
 
-			$thread = new TestParentCheckTimeout($debug);
+			$thread = new TestParentCheckTimeout(
+				null, null, $debug
+			);
+			$childPid = $thread->wait()->getChildPid();
+			$testCase->assertNotEmpty($childPid);
 
-			$childChildPid = $childPid = null;
+			$childChildPid = null;
+			$triggered = false;
 			$thread->bind(
 				TestParentCheckTimeout::EV_PID,
-				function($event, $e_data) use (&$childPid, &$childChildPid, $testCase) {
-					$testCase->assertSame(TestParentCheckTimeout::EV_PID, $event);
-					$childPid      = $e_data[0];
-					$childChildPid = $e_data[1];
+				function($event_name, $e_data)
+				use (&$childChildPid, &$triggered, $testCase)
+				{
+					$triggered = true;
+					$testCase->assertSame(
+						TestParentCheckTimeout::EV_PID,
+						$event_name
+					);
+					$childChildPid = $e_data;
 				}
-			)->wait()->run()->wait();
+			)->run()->wait();
 
-			// PIDs
-			$testCase->assertNotEmpty($childPid);
+			$testCase->assertTrue($triggered);
 			$testCase->assertNotEmpty($childChildPid);
 
 			// Child is dead
-			$isAliveChild = posix_kill($childPid, 0);
+			$isAliveChild = Base::getProcessIsAlive($childPid);
 			$testCase->assertFalse($isAliveChild);
 
 			// Child's child can be alive in that moment, so wait a litle
 			usleep(20000);
-			$i = 10;
+			$i = 50;
 			do {
-				$isAliveChildChild = posix_kill($childChildPid, 0);
-				if (!$isAliveChildChild) {
+				if (!$isAliveChildChild = Base::getProcessIsAlive($childChildPid)) {
 					break;
 				}
-				usleep(10000);
+				usleep(20000);
 				$i--;
 			} while ($i > 0);
 			$testCase->assertFalse($isAliveChildChild);
-		}, true);
-	}
 
-	/**
-	 * Thread events with locking test
-	 *
-	 * @author amal
-	 * @group integrational
-	 *
-	 * @requires extension posix
-	 * @requires extension pcntl
-	 */
-	public function testThreadWithEventsAndLocking()
-	{
-		$testCase = $this;
-		$this->processAsyncTest(function() use ($testCase) {
-			$testCase->processThreadEvent(false, true);
-		});
+			$thread->cleanup();
+		}, true);
 	}
 
 	#endregion
@@ -802,7 +998,7 @@ class ThreadTest extends TestCase
 	 *
 	 * @throws \Exception
 	 */
-	public function processAsyncTest($callback, $simple = false)
+	function processAsyncTest($callback, $simple = false)
 	{
 		if (!Thread::$useForks) {
 			$this->markTestSkipped(
@@ -863,42 +1059,61 @@ class ThreadTest extends TestCase
 	{
 		$num = 10;
 
+		$async = Thread::$useForks;
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			"Thread test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			"Thread test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
 			'-----------------------', PHP_EOL;
 		}
 
 		$thread = $withChild
-				? new TestThreadWithChilds($debug)
-				: new TestThreadReturnFirstArgument($debug);
+				? new TestThreadWithChilds(null, null, $debug)
+				: new TestThreadReturnFirstArgument(null, null, $debug);
 
-		if (Thread::$useForks) {
-			$this->assertNotEmpty($thread->getEventBase());
+		if ($async) {
+			$this->assertNotEmpty($thread->getEventLoop());
+			$this->assertNotEmpty($thread->getPid());
+			$this->assertNotEmpty($thread->getParentPid());
 		} else {
-			$this->assertEmpty($thread->getEventBase());
+			$this->assertEmpty($thread->getPid());
+			$this->assertEmpty($thread->getParentPid());
+			$this->assertEmpty($thread->getEventLoop());
 		}
 
 		// You can override preforkWait property
 		// to TRUE to not wait thread at first time manually
 		$thread->wait();
 
+		if ($async) {
+			$this->assertTrue($thread->getIsForked());
+		}
+		$this->assertFalse($thread->getIsChild());
+		$this->assertSame(Thread::STATE_WAIT, $thread->getState());
+		$this->assertEmpty(
+			$thread->getLastErrorCode(),
+			$thread->getLastErrorMsg()
+		);
+		$this->assertEmpty($thread->getLastErrorMsg());
+		$this->assertFalse($thread->getIsCleaning());
+
 		for ($i = 0; $i < $num; $i++) {
 			$value = $bigResult ? str_repeat($i, 100000) : $i;
 			$thread->run($value)->wait();
-			$state = $thread->getState();
-			$this->assertSame(Thread::STATE_WAIT, $state);
-			$sucess = $thread->getSuccess();
-			$this->assertTrue($sucess);
-			$result = $thread->getResult();
-			$this->assertEquals($value, $result);
+			$this->assertSame(Thread::STATE_WAIT, $thread->getState());
+			$this->assertTrue($thread->getSuccess());
+			$this->assertEquals($value, $thread->getResult());
+			$this->assertEmpty(
+				$thread->getLastErrorCode(),
+				$thread->getLastErrorMsg()
+			);
+			$this->assertEmpty($thread->getLastErrorMsg());
 		}
 
 		$thread->cleanup();
-
-		$this->assertEmpty($thread->getEventBase());
-
+		$this->assertTrue($thread->getIsCleaning());
+		$this->assertEmpty($thread->getEventLoop());
 		$this->assertSame('TERM', $thread->getStateName());
+		$this->assertSame('INIT', $thread->getStateName(Thread::STATE_INIT));
 	}
 
 	/**
@@ -910,22 +1125,26 @@ class ThreadTest extends TestCase
 	{
 		$num = 10;
 
+		$async = Thread::$useForks;
+
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			"Thread errorable test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			"Thread errorable test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = new TestThreadReturnArgErrors($debug);
+		$thread = new TestThreadReturnFirstArgumentWithErrors(
+			null, null, $debug
+		);
 
-		$i = $j = 0;
-		$value = $i;
+		$value = $i = $j = 0;
+		$max   = (int)($num*2);
 
 		// You can override preforkWait property
 		// to TRUE to not wait thread at first time manually
 		$thread->wait();
 
-		while ($num > $i) {
+		while ($num > $i && $j <= $max) {
 			$j++;
 			$thread->run($value, $j)->wait();
 			$state = $thread->getState();
@@ -937,7 +1156,12 @@ class ThreadTest extends TestCase
 			}
 		}
 
-		$this->assertSame($num*2, $j);
+		$this->assertSame($num, $i, 'All jobs must be done');
+		if ($async) {
+			$this->assertTrue($j > $num);
+		} else {
+			$this->assertSame($num, $j);
+		}
 
 		$thread->cleanup();
 	}
@@ -953,7 +1177,7 @@ class ThreadTest extends TestCase
 	function processThreadEvent($debug = false, $withLocking = false)
 	{
 		$events = 11;
-		$num = 3;
+		$num    = 3;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
@@ -962,16 +1186,16 @@ class ThreadTest extends TestCase
 		}
 
 		$thread = $withLocking
-				? new TestThreadEventsWithLocking($debug)
-				: new TestThreadEvents($debug);
+				? new TestThreadEventsWithLocking(null, null, $debug)
+				: new TestThreadEvents(null, null, $debug);
 
-		$test = $this;
-		$arg = mt_rand(12, 987);
+		$arg  = mt_rand(12, 987);
 		$last = 0;
-		$cb = function($event, $e_data, $e_arg) use ($arg, $test, &$last) {
-			$test->assertSame($arg, $e_arg);
-			$test->assertSame(TestThreadEvents::EV_PROCESS, $event);
-			$test->assertEquals($last++, $e_data);
+		$testCase = $this;
+		$cb = function($event, $e_data, $e_arg) use ($arg, $testCase, &$last) {
+			$testCase->assertSame($arg, $e_arg);
+			$testCase->assertSame(TestThreadEvents::EV_PROCESS, $event);
+			$testCase->assertEquals($last++, $e_data);
 		};
 		$thread->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
 
@@ -979,13 +1203,18 @@ class ThreadTest extends TestCase
 		// to TRUE to not wait thread at first time manually
 		$thread->wait();
 
+		$signalNotChecked = !$withLocking;
 		for ($i = 0; $i < $num; $i++) {
 			$last = 0;
-			$thread->run($events)->wait();
-			$state = $thread->getState();
-			$this->assertSame(Thread::STATE_WAIT, $state);
-			$sucess = $thread->getSuccess();
-			$this->assertTrue($sucess);
+			if ($signalNotChecked) {
+				$signalNotChecked = false;
+				$thread->run($events)
+					   ->sendSignalToChild(SIGWINCH)
+					   ->wait();
+			} else {
+				$thread->run($events)->wait();
+			}
+			$this->assertTrue($thread->getSuccess());
 		}
 
 		$this->assertSame($events, $last);
@@ -1002,13 +1231,17 @@ class ThreadTest extends TestCase
 	{
 		$num = 3;
 
+		$async = Thread::$useForks;
+
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			"Thread test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			"Thread arguments mapping test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = new TestThreadArgumentsMapping($debug);
+		$thread = new TestThreadArgumentsMapping(
+			null, null, $debug
+		);
 
 		// You can override preforkWait property
 		// to TRUE to not wait thread at first time manually
@@ -1016,12 +1249,10 @@ class ThreadTest extends TestCase
 
 		for ($i = 0; $i < $num; $i++) {
 			$thread->run(123, 456, 789)->wait();
-			$state = $thread->getState();
-			$this->assertSame(Thread::STATE_WAIT, $state);
-			$sucess = $thread->getSuccess();
-			$this->assertTrue($sucess);
-			$result = $thread->getResult();
-			$this->assertEquals(array(123, 456, 789), $result);
+			$this->assertEquals(
+				array(123, 456, 789),
+				$thread->getResult()
+			);
 		}
 
 		$thread->cleanup();
@@ -1054,62 +1285,69 @@ class ThreadTest extends TestCase
 				: 'TestThreadReturnFirstArgument';
 		$thread = __NAMESPACE__ . '\\' . $thread;
 
-		$pool = new ThreadPool($thread, $threads, null, $debug);
+		$name = 'example';
+		$pool = new ThreadPool($thread, $threads, null, $name, $debug);
 
-		$ref = new ReflectionProperty($pool, 'maxThreads');
-		$ref->setAccessible(true);
+		$this->assertNotEmpty($pool->getId());
+		$this->assertSame($name, $pool->getPoolName());
+		$this->assertEmpty($pool->getThreadProcessName());
+		$this->assertSame($thread, $pool->getThreadClassName());
 
 		if (Thread::$useForks) {
-			$this->assertSame($threads, $pool->threadsCount);
-			$this->assertSame($threads, $ref->getValue($pool));
+			$this->assertSame($threads, $pool->getThreadsCount());
+			$this->assertSame($threads, $pool->getMaxThreads());
 
 			// We can not set number of threads lower than
 			// number of already created threads
 			$pool->setMaxThreads($threads-1);
-			$this->assertSame($threads, $pool->threadsCount);
-			$this->assertSame($threads, $ref->getValue($pool));
+			$this->assertSame($threads, $pool->getThreadsCount());
+			$this->assertSame($threads, $pool->getMaxThreads());
 
-			// But we can set more. And they are not created immediately
+			// But we can set more
 			$pool->setMaxThreads($targetThreads);
-			$this->assertSame($threads, $pool->threadsCount);
-			$this->assertSame($targetThreads, $ref->getValue($pool));
+			$this->assertSame($targetThreads, $pool->getThreadsCount());
+			$this->assertSame($targetThreads, $pool->getMaxThreads());
 		} else {
-			$this->assertSame(1, $pool->threadsCount);
-			$this->assertSame(1, $ref->getValue($pool));
+			$this->assertSame(1, $pool->getThreadsCount());
+			$this->assertSame(1, $pool->getMaxThreads());
 
 			$pool->setMaxThreads(8);
-			$this->assertSame(1, $pool->threadsCount);
-			$this->assertSame(1, $ref->getValue($pool));
+			$this->assertSame(1, $pool->getThreadsCount());
+			$this->assertSame(1, $pool->getMaxThreads());
 
 			$pool->setMaxThreads(0);
-			$this->assertSame(1, $pool->threadsCount);
-			$this->assertSame(1, $ref->getValue($pool));
+			$this->assertSame(1, $pool->getThreadsCount());
+			$this->assertSame(1, $pool->getMaxThreads());
 		}
 
 		$jobs = array();
 
 		$i = 0;
 		$left = $num;
-		$maxI = ceil($num * 1.5);
+		$maxI = (int)ceil($num * 1.5);
 		$worked = array();
 		do {
 			while ($pool->hasWaiting() && $left > 0) {
-				$arg = mt_rand(100, 2000);
+				$arg = mt_rand(1, 999);
 				if ($bigResult) {
-					$arg = str_repeat($arg, 10000);
+					$arg = str_repeat($arg, 1000000);
 				}
-				if (!$threadId = $pool->run($arg)) {
-					throw new Exception('Pool slots error');
-				}
-				$this->assertTrue(!isset($jobs[$threadId]));
-				$jobs[$threadId] = $arg;
+				$threadId = $pool->run($arg);
+				$this->assertNotEmpty($threadId);
+				$this->assertTrue(
+					!isset($jobs[$threadId]),
+					"Thread #$threadId is not failed correctly"
+				);
+				$jobs[$threadId]   = $arg;
 				$worked[$threadId] = true;
 				$left--;
 			}
-			if ($results = $pool->wait()) {
+			$results = $pool->wait($failed);
+			$this->assertEmpty($failed, 'Failed results: ' . print_r($failed, true));
+			if ($results) {
 				foreach ($results as $threadId => $res) {
-					$this->assertTrue(isset($jobs[$threadId]));
-					$this->assertEquals($jobs[$threadId], $res);
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertEquals($jobs[$threadId], $res, "Thread #$threadId");
 					unset($jobs[$threadId]);
 					$num--;
 				}
@@ -1117,20 +1355,20 @@ class ThreadTest extends TestCase
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertSame(0, $num);
+		$this->assertSame(0, $num, 'All jobs must be done');
 
 		$this->assertSame(
-			$pool->threadsCount, count($worked),
+			$pool->getThreadsCount(), count($worked),
 			'Worked threads count is not equals to real threads count'
 		);
 
-		$state = $pool->getState();
+		$state = $pool->getThreadsState();
 
 		if (Thread::$useForks) {
-			$this->assertSame($targetThreads, $pool->threadsCount);
+			$this->assertSame($targetThreads, $pool->getThreadsCount());
 			$this->assertSame($targetThreads, count($state));
 		} else {
-			$this->assertSame(1, $pool->threadsCount);
+			$this->assertSame(1, $pool->getThreadsCount());
 			$this->assertSame(1, count($state));
 		}
 
@@ -1139,13 +1377,109 @@ class ThreadTest extends TestCase
 		}
 
 		$pool->cleanup();
-		$this->assertSame(0, $pool->threadsCount);
-		$this->assertEmpty($pool->threads);
-		$this->assertEmpty($pool->waiting);
-		$this->assertEmpty($pool->working);
-		$this->assertEmpty($pool->initializing);
-		$this->assertEmpty($pool->failed);
-		$this->assertEmpty($pool->results);
+		$this->assertSame(0, $pool->getThreadsCount());
+		$this->assertEmpty($pool->getThreads());
+		$this->assertFalse($pool->hasWaiting());
+		$this->assertEmpty($pool->getThreadsState());
+	}
+
+	/**
+	 * Pool 2
+	 *
+	 * @param bool $debug
+	 *
+	 * @throws Exception
+	 */
+	function processPool2($debug = false)
+	{
+		$async = Thread::$useForks;
+
+		if ($debug) {
+			echo '-------------------------', PHP_EOL,
+			"Additional thread pool test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
+			'-------------------------', PHP_EOL;
+		}
+
+		$threads = 2;
+		$thread  = __NAMESPACE__ . '\TestThreadReturnAllArguments';
+		$pName = 'ReturnAllArguments';
+		$pool = new ThreadPool(
+			$thread, $threads, $pName, null, $debug
+		);
+
+		$this->assertSame($pName, $pool->getThreadProcessName());
+
+		$state = $pool->getThreadsState();
+		$this->assertSame($async ? $threads : 1, count($state));
+		foreach ($state as $s) {
+			$this->assertTrue('INIT' === $s || 'WAIT' === $s);
+		}
+
+		if ($async) {
+			$catched = 0;
+			try {
+				$this->assertFalse($pool->run());
+			} catch (Exception $e) {
+				$catched++;
+			}
+			try {
+				$this->assertFalse($pool->run('example'));
+			} catch (Exception $e) {
+				$catched++;
+			}
+			$this->assertSame(2, $catched);
+		}
+
+		$data   = array(
+			array(),
+			array(1),
+			array(1, 2),
+			array(1, 2, 3),
+			array(1, 2, 3, 4),
+			array(1, 2, 3, 4, 5),
+		);
+		$worked = $jobs = array();
+		$i      = 0;
+		$left   = $num = count($data);
+		$maxI   = ceil($num * 1.5);
+		do {
+			while ($pool->hasWaiting() && $left > 0) {
+				$args = array_shift($data);
+				if (!$threadId = call_user_func_array(array($pool, 'run'), $args)) {
+					throw new Exception('Pool slots error');
+				}
+
+				$this->assertNotEmpty($threadId);
+				$this->assertTrue(
+					!isset($jobs[$threadId]),
+					"Thread #$threadId is not failed correctly"
+				);
+
+				$jobs[$threadId]   = $args;
+				$worked[$threadId] = true;
+				$left--;
+			}
+			$results = $pool->wait($failed);
+			$this->assertEmpty($failed, 'Failed results: ' . print_r($failed, true));
+			if ($results) {
+				foreach ($results as $threadId => $res) {
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertEquals($jobs[$threadId], $res, "Thread #$threadId");
+					unset($jobs[$threadId]);
+					$num--;
+				}
+			}
+			$i++;
+		} while ($num > 0 && $i < $maxI);
+
+		$this->assertSame(0, $num, 'All jobs must be done');
+
+		$this->assertSame(
+			$pool->getThreadsCount(), count($worked),
+			'Worked threads count is not equals to real threads count'
+		);
+
+		$pool->cleanup();
 	}
 
 	/**
@@ -1159,7 +1493,7 @@ class ThreadTest extends TestCase
 	function processPoolEvent($debug = false, $async = false)
 	{
 		$events  = 3;
-		$num     = 6;
+		$num     = 12;
 		$threads = 3;
 
 		if ($debug) {
@@ -1170,7 +1504,7 @@ class ThreadTest extends TestCase
 
 		$pool = new ThreadPool(
 			__NAMESPACE__ . '\TestThreadEvents',
-			$threads, null, $debug
+			$threads, null, null, $debug
 		);
 
 		$test = $this;
@@ -1198,20 +1532,24 @@ class ThreadTest extends TestCase
 		$maxI = ceil($num * 1.5);
 		do {
 			while ($pool->hasWaiting() && $left > 0) {
-				if (!$threadId = $pool->run($events)) {
-					throw new Exception('Pool slots error');
-				}
+				$threadId = $pool->run($events);
+				$this->assertNotEmpty($threadId);
 				if ($async) {
-					$this->assertTrue(!isset($jobs[$threadId]));
+					$this->assertTrue(
+						!isset($jobs[$threadId]),
+						"Thread #$threadId is not failed correctly"
+					);
 					$jobs[$threadId] = 0;
 				}
 				$worked[$threadId] = true;
 				$left--;
 			}
-			if ($results = $pool->wait()) {
+			$results = $pool->wait($failed);
+			$this->assertEmpty($failed, 'Failed results: ' . print_r($failed, true));
+			if ($results) {
 				foreach ($results as $threadId => $res) {
 					$num--;
-					$this->assertTrue(isset($jobs[$threadId]));
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
 					$this->assertSame($events, $jobs[$threadId]);
 					unset($jobs[$threadId]);
 				}
@@ -1219,21 +1557,9 @@ class ThreadTest extends TestCase
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertSame(0, $num);
-
-		$this->assertSame(
-			$pool->threadsCount, count($worked),
-			'Worked threads count is not equals to real threads count'
-		);
+		$this->assertSame(0, $num, 'All jobs must be done');
 
 		$pool->cleanup();
-		$this->assertSame(0, $pool->threadsCount);
-		$this->assertEmpty($pool->threads);
-		$this->assertEmpty($pool->waiting);
-		$this->assertEmpty($pool->working);
-		$this->assertEmpty($pool->initializing);
-		$this->assertEmpty($pool->failed);
-		$this->assertEmpty($pool->results);
 	}
 
 	/**
@@ -1243,10 +1569,10 @@ class ThreadTest extends TestCase
 	 *
 	 * @throws Exception
 	 */
-	function processPoolErrorable($debug)
+	function processPoolErrorable($debug = false)
 	{
-		$num     = 6;
-		$threads = 2;
+		$num     = 12;
+		$threads = 4;
 
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
@@ -1255,39 +1581,44 @@ class ThreadTest extends TestCase
 		}
 
 		$pool = new ThreadPool(
-			__NAMESPACE__ . '\TestThreadReturnArgErrors',
-			$threads, null, $debug
+			__NAMESPACE__ . '\TestThreadReturnFirstArgumentWithErrors',
+			$threads, null, null, $debug
 		);
 
-		$jobs = $worked = array();
+		$jobs = array();
 
-		$i = 0;
-		$j = 0;
+		$i = $j = 0;
 		$left = $num;
 		$maxI = ceil($num * 2.5);
 		do {
 			while ($pool->hasWaiting() && $left > 0) {
-				$arg = mt_rand(1000000, 20000000);
-				if (!$threadId = $pool->run($arg, $j)) {
-					throw new Exception('Pool slots error');
-				}
-				$this->assertTrue(!isset($jobs[$threadId]));
+				$arg = mt_rand(1000000, 200000000);
+				$threadId = $pool->run($arg, $j);
+
+				$this->assertTrue(
+					!isset($jobs[$threadId]),
+					"Thread #$threadId is not failed correctly"
+				);
+
 				$jobs[$threadId] = $arg;
-				$worked[$threadId] = true;
 				$left--;
 				$j++;
 			}
 			if ($results = $pool->wait($failed)) {
 				foreach ($results as $threadId => $res) {
 					$num--;
-					$this->assertTrue(isset($jobs[$threadId]));
-					$this->assertEquals($jobs[$threadId], $res);
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertEquals($jobs[$threadId], $res, "Thread #$threadId");
 					unset($jobs[$threadId]);
 				}
 			}
 			if ($failed) {
-				foreach ($failed as $threadId) {
-					$this->assertTrue(isset($jobs[$threadId]));
+				foreach ($failed as $threadId => $errArray) {
+					list($errCode, $errMsg) = $errArray;
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertNotEmpty($errCode, 'Error code needed');
+					$this->assertTrue(is_int($errCode), 'Error code needed');
+					$this->assertNotEmpty($errMsg, 'Error message needed');
 					unset($jobs[$threadId]);
 					$left++;
 				}
@@ -1295,28 +1626,245 @@ class ThreadTest extends TestCase
 			$i++;
 		} while ($num > 0 && $i < $maxI);
 
-		$this->assertSame(0, $num);
-
-		$this->assertSame(
-			$pool->threadsCount, count($worked),
-			'Worked threads count is not equals to real threads count'
-		);
+		$this->assertSame(0, $num, 'All jobs must be done');
 
 		$pool->cleanup();
-		$this->assertSame(0, $pool->threadsCount);
-		$this->assertEmpty($pool->threads);
-		$this->assertEmpty($pool->waiting);
-		$this->assertEmpty($pool->working);
-		$this->assertEmpty($pool->initializing);
-		$this->assertEmpty($pool->failed);
-		$this->assertEmpty($pool->results);
+		$this->assertSame(0, $pool->getThreadsCount());
+		$this->assertEmpty($pool->getThreads());
+		$this->assertFalse($pool->hasWaiting());
+	}
+
+	/**
+	 * Pool, external errors
+	 *
+	 * @param bool $debug
+	 *
+	 * @throws Exception
+	 */
+	function processPoolErrorableExternal($debug = false)
+	{
+		$num     = 9;
+		$threads = 3;
+
+		if ($debug) {
+			echo '------------------------------------------', PHP_EOL,
+			"Thread pool test with external stop: ", (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'------------------------------------------', PHP_EOL;
+		}
+
+		$pool = new ThreadPool(
+			__NAMESPACE__ . '\TestThreadReturnFirstArgument',
+			$threads, null, null, $debug
+		);
+
+		$argDebug = $debug && true;
+		$debugRef = new ReflectionMethod($pool, 'debug');
+		$debugRef->setAccessible(true);
+		$debugCb = function ($msg) use ($argDebug, $debugRef, $pool) {
+			$argDebug && $debugRef->invoke($pool, $msg);
+		};
+
+		$jobs = array();
+
+		$i = $j = 0;
+		$left = $num;
+		$maxI = ceil($num * 2.5);
+		do {
+			while ($pool->hasWaiting() && $left > 0) {
+				$arg = str_repeat(
+					mt_rand(100, 999),
+					$argDebug ? 3 : 10000
+				);
+
+				$threadId = $pool->run($arg, $j);
+
+				$this->assertNotEmpty($threadId);
+				$debugCb(
+					"TEST: Thread #$threadId; Job argument on start [$arg]"
+				);
+
+				// Stop child
+				if (1 & $j) {
+					$threads = $pool->getThreads();
+					$threads[$threadId]->sendSignalToChild(
+						($j % 4) > 1 ? SIGTERM : SIGKILL
+					);
+					$debugCb(
+						"TEST: Thread #$threadId stopped"
+					);
+					unset($threads);
+				}
+
+				$this->assertTrue(
+					!isset($jobs[$threadId]),
+					"Thread #$threadId is not failed correctly"
+				);
+
+				$jobs[$threadId] = $arg;
+				$left--;
+				$j++;
+			}
+			if ($results = $pool->wait($failed)) {
+				foreach ($results as $threadId => $res) {
+					$debugCb(
+						"TEST: Thread #$threadId; Job result [$res]"
+					);
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertEquals($jobs[$threadId], $res, "Thread #$threadId");
+					unset($jobs[$threadId]);
+					$num--;
+				}
+			}
+			if ($failed) {
+				foreach ($failed as $threadId => $errArray) {
+					list($errCode, $errMsg) = $errArray;
+					$debugCb(
+						"TEST: Thread #$threadId; Job fail [#$errCode - $errMsg]"
+					);
+					$this->assertTrue(isset($jobs[$threadId]), "Thread #$threadId");
+					$this->assertNotEmpty($errCode, 'Error code needed');
+					$this->assertTrue(is_int($errCode), 'Error code needed');
+					$this->assertNotEmpty($errMsg, 'Error message needed');
+					unset($jobs[$threadId]);
+					$left++;
+				}
+			}
+			$i++;
+		} while ($num > 0 && $i < $maxI);
+
+		$this->assertSame(0, $num, 'All jobs must be done');
+
+		$pool->cleanup();
+	}
+
+	/**
+	 * Exception in events triggering
+	 *
+	 * @param bool $debug
+	 */
+	function processExceptionInEventListener($debug = false)
+	{
+		if ($debug) {
+			echo '-----------------------', PHP_EOL,
+			"Exception in event listener test: ", (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
+		}
+
+		$thread = new TestThreadEvents(null, null, $debug);
+
+		$testCase = $this;
+		$thread->bind(
+			TestThreadEvents::EV_PROCESS,
+			function($event, $e_data, $e_arg) use ($testCase) {
+				$testCase->assertSame(null, $e_arg);
+				$testCase->assertSame(
+					TestThreadEvents::EV_PROCESS,
+					$event
+				);
+				$testCase->assertEquals(0, $e_data);
+
+				throw new InvalidArgumentException(
+					'Example Message'
+				);
+			}
+		);
+
+		try {
+			$thread->wait()->run(1)->wait();
+		} catch (InvalidArgumentException $e) {
+			$catched = true;
+			$this->assertTrue($e instanceof InvalidArgumentException);
+			$this->assertContains(
+				'Example Message', $e->getMessage()
+			);
+		}
+		$this->assertFalse(empty($catched));
+
+		$thread->cleanup();
+	}
+
+
+	/**
+	 * Two different threads
+	 */
+	function processTwoDifferentThreads($debug = false)
+	{
+		$async = Thread::$useForks;
+
+		if ($debug) {
+			echo '-----------------------', PHP_EOL,
+			"Different threads test ", ($async ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
+		}
+
+
+		$arg1 = 123456789;
+		$arg2 = 987654321;
+
+		$thread1 = new TestThreadReturnFirstArgument(
+			null, null, $debug
+		);
+		$thread2 = new TestThreadReturnFirstArgument(
+			null, null, $debug
+		);
+
+
+		$thread1->wait();
+		$this->assertEmpty(
+			$thread1->getLastErrorCode(),
+			$thread1->getLastErrorMsg()
+		);
+		$async && $this->assertTrue($thread1->getIsForked());
+		$thread1->run($arg1);
+
+		$thread2->wait();
+		$this->assertEmpty(
+			$thread2->getLastErrorCode(),
+			$thread2->getLastErrorMsg()
+		);
+		$async && $this->assertTrue($thread2->getIsForked());
+		$thread2->run($arg2);
+
+		$res2 = $thread2->wait()->getResult();
+		$res1 = $thread1->wait()->getResult();
+		$this->assertTrue($thread1->getSuccess());
+		$this->assertSame($arg1, $res1);
+		$this->assertTrue($thread2->getSuccess());
+		$this->assertSame($arg2, $res2);
+
+
+		$thread2->run($arg1);
+		$thread1->run($arg2);
+
+		$res1 = $thread1->wait()->getResult();
+		$res2 = $thread2->wait()->getResult();
+		$this->assertSame($arg2, $res1);
+		$this->assertSame($arg1, $res2);
+
+
+		$thread1->run($arg1);
+		$thread2->run($arg2);
+
+		$res1 = $thread1->wait()->getResult();
+		$res2 = $thread2->wait()->getResult();
+		$this->assertSame($arg1, $res1);
+		$this->assertSame($arg2, $res2);
+
+
+		$thread2->cleanup();
+
+		$res1 = $thread1->run($arg2)->wait()->getResult();
+		$this->assertSame($arg2, $res1);
+
+
+		$thread1->cleanup();
 	}
 
 
 	/**
 	 * Event callback for tests
 	 */
-	function processEvent($event, $e_data, $e_arg)
+	function processEventCallback($event, $e_data, $e_arg)
 	{
 		$this->assertSame(TestThreadEvents::EV_PROCESS, $event);
 		$this->assertEquals(0, $e_arg);
@@ -1338,12 +1886,17 @@ class TestThreadArgumentsMapping extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
+	protected $timeoutMasterResultWait = 0.5;
+
+	/**
+	 * {@inheritdoc}
+	 */
 	protected $argumentsMapping = true;
 
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process($a, $b, $c)
+	function process($a, $b, $c)
 	{
 		return array($a, $b, $c);
 	}
@@ -1357,50 +1910,79 @@ class TestThreadReturnFirstArgument extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
-	{
-		return $this->getParam(0);
-	}
-}
+	protected $timeoutMasterInitWait = 1;
 
-/**
- * Test thread
- */
-class TestThreadReturnAllArguments extends Thread
-{
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
-	{
-		return $this->params;
-	}
-}
+	protected $timeoutMasterResultWait = 2;
 
-/**
- * Test thread
- */
-class TestThreadReturnArgErrors extends Thread
-{
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
+	protected $timeoutWorkerJobWait = 2;
+
+
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
 	{
-		if (1 & (int)$this->getParam(1)) {
-			// Emulate terminating
-			posix_kill($this->pid, SIGKILL);
-			exit;
+		$param = $this->getParam(0);
+		if ($this->debug && is_scalar($param) && strlen($param) < 50) {
+			$this->debug("TEST: Job argument in worker [$param]");
 		}
-		return $this->getParam(0);
+		return $param;
 	}
 }
 
 /**
  * Test thread
  */
-class TestThreadWithChilds extends Thread
+class TestThreadReturnAllArguments extends TestThreadReturnFirstArgument
 {
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
+	{
+		return $this->getParams();
+	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadReturnFirstArgumentWithErrors extends TestThreadReturnFirstArgument
+{
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
+	{
+		if (1 & ($arg = (int)$this->getParam(1))) {
+			// Emulate terminating
+			$signo = ($arg % 4) > 1 ? SIGTERM : SIGKILL;
+			if ($this->debug) {
+				$signame = Base::getSignalName($signo);
+				$this->debug("TEST: Emulate terminating with $signame ($signo)");
+			}
+			$this->sendSignalToChild($signo);
+		}
+		return parent::process();
+	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadWithChilds extends TestThreadReturnFirstArgument
+{
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $timeoutMasterResultWait = 3;
+
 	/**
 	 * Enable prefork waiting to test it
 	 */
@@ -1409,7 +1991,7 @@ class TestThreadWithChilds extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
+	function process()
 	{
 		/** @noinspection PhpUnusedLocalVariableInspection */
 		$res = `echo 1`;
@@ -1420,14 +2002,19 @@ class TestThreadWithChilds extends Thread
 /**
  * Test thread
  */
-class TestThreadEvents extends Thread
+class TestThreadEvents extends TestThreadReturnFirstArgument
 {
 	const EV_PROCESS = 'process';
 
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
+	protected $timeoutMasterResultWait = 1;
+
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
 	{
 		$events = $this->getParam(0);
 		for ($i = 0; $i < $events; $i++) {
@@ -1445,6 +2032,11 @@ class TestThreadEventsWithLocking extends TestThreadEvents
 	 * {@inheritdoc}
 	 */
 	protected $eventLocking = true;
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $prefork = false;
 }
 
 /**
@@ -1474,7 +2066,7 @@ class TestPreforkWaitTimeout extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process() {}
+	function process() {}
 }
 
 /**
@@ -1490,7 +2082,7 @@ class TestResultWaitTimeout extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
+	function process()
 	{
 		// To certainly meet the timeout
 		usleep(2);
@@ -1510,7 +2102,7 @@ class TestJobWaitTimeout extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process() {}
+	function process() {}
 }
 
 /**
@@ -1528,19 +2120,19 @@ class TestParentCheckTimeout extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process()
+	function process()
 	{
 		// Create new thread. Set debug flag from this thread
-		$child = new TestParentCheckTimeoutChild($this->debug);
+		$child = new TestParentCheckTimeoutChild(
+			null, null, $this->debug
+		);
 
 		// Send child PID to parent via event
-		$childPid = $child->wait()->child_pid;
-		$this->trigger(self::EV_PID, array($this->pid, $childPid));
+		$childPid = $child->wait()->getChildPid();
+		$this->trigger(self::EV_PID, $childPid);
 
-		// Emulate terminating
-		$this->killWorker();
-		posix_kill($this->pid, SIGKILL);
-		exit;
+		// Emulate terminating with small timeout
+		$this->sendSignalToChild(SIGKILL);
 	}
 }
 
@@ -1557,7 +2149,52 @@ class TestParentCheckTimeoutChild extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	public function process() {}
+	function process() {}
+}
+
+/**
+ * Test thread
+ */
+class TestSignalsHandling extends TestThreadReturnFirstArgument
+{
+	/**
+	 * @var int
+	 */
+	protected $catchedSignals = 0;
+
+	/**
+	 * @var int
+	 */
+	public static $catchedSignalsInParent = 0;
+
+
+	/**
+	 * {@inheritdoc}
+	 */
+	function process()
+	{
+		// Needed sometimes if child isn't catched signal yet
+		$this->getEventLoop()->loop(EVLOOP_NONBLOCK);
+
+		return $this->sendSignalToParent(SIGUSR2)->catchedSignals;
+	}
+
+
+	/**
+	 * Child SIGUSR1 handler
+	 */
+	protected function sigUsr1()
+	{
+		$this->catchedSignals++;
+	}
+
+	/**
+	 * Parent SIGUSR2 handler
+	 */
+	protected static function mSigUsr2()
+	{
+		self::$catchedSignalsInParent++;
+	}
 }
 
 #endregion

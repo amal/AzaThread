@@ -82,7 +82,7 @@ Examples
 ```php
 class ExampleThread extends Thread
 {
-	protected function process()
+	function process()
 	{
 		// Some work here
 	}
@@ -97,7 +97,7 @@ $thread->wait()->run();
 ```php
 class ExampleThread extends Thread
 {
-	protected function process()
+	function process()
 	{
 		return $this->getParam(0);
 	}
@@ -114,7 +114,7 @@ class ExampleThread extends Thread
 {
 	const EV_PROCESS = 'process';
 
-	protected function process()
+	function process()
 	{
 		$events = $this->getParam(0);
 		for ($i = 0; $i < $events; $i++) {
