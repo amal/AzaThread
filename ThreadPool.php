@@ -586,6 +586,26 @@ class ThreadPool
 	}
 
 	/**
+	 * Returns statistic for all threads in pool
+	 *
+	 * @return array[] Array of data (threadId => data array)
+	 * with fields: state, started_jobs, successful_jobs, failed_jobs
+	 */
+	public function getThreadsStatistic()
+	{
+		$state = array();
+		foreach ($this->threads as $threadId => $thread) {
+			$state[$threadId] = array(
+				'state'           => $thread->getStateName(),
+				'started_jobs'    => $thread->getStartedJobs(),
+				'successful_jobs' => $thread->getSuccessfulJobs(),
+				'failed_jobs'     => $thread->getFailedJobs(),
+			);
+		}
+		return $state;
+	}
+
+	/**
 	 * Returns current threads count
 	 */
 	public function getThreadsCount()

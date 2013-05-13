@@ -1212,6 +1212,10 @@ class ThreadTest extends TestCase
 			$this->assertEmpty($thread->getLastErrorMsg());
 		}
 
+		$this->assertSame($num, $thread->getStartedJobs());
+		$this->assertSame($num, $thread->getSuccessfulJobs());
+		$this->assertSame(0, $thread->getFailedJobs());
+
 		$thread->cleanup();
 		$this->assertTrue($thread->getIsCleaning());
 		$this->assertSame('TERM', $thread->getStateName());
@@ -1324,6 +1328,14 @@ class ThreadTest extends TestCase
 		} else {
 			$this->assertSame($num, $j);
 		}
+
+		if ($async) {
+			$this->assertTrue($thread->getFailedJobs() > 0);
+		}
+		$this->assertSame(
+			$thread->getStartedJobs(),
+			$thread->getSuccessfulJobs() + $thread->getFailedJobs()
+		);
 
 		$thread->cleanup();
 	}
@@ -1533,16 +1545,17 @@ class ThreadTest extends TestCase
 			'Worked threads count is not equals to real threads count'
 		);
 
-		$state = $pool->getThreadsState();
-
+		$state     = $pool->getThreadsState();
+		$statistic = $pool->getThreadsStatistic();
 		if (Thread::$useForks) {
 			$this->assertSame($targetThreads, $pool->getThreadsCount());
 			$this->assertSame($targetThreads, count($state));
+			$this->assertSame($targetThreads, count($statistic));
 		} else {
 			$this->assertSame(1, $pool->getThreadsCount());
 			$this->assertSame(1, count($state));
+			$this->assertSame(1, count($statistic));
 		}
-
 		foreach ($state as $s) {
 			$this->assertSame('WAIT', $s);
 		}

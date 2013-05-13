@@ -5,6 +5,7 @@ CHANGELOG
 
 
 13.05.2013
+- **FEATURE:** Threads statistics collection + API for accessing it via pool (Issue #4, amal)
 - **MINOR:** Additional tests (empty argument/result, thread hooks) (amal)
 
 12.05.2013

@@ -295,11 +295,26 @@ abstract class Thread
 	private $id;
 
 	/**
-	 * Internal consecutive job id
+	 * Internal consecutive job id.
+	 * In fact it's a number of the started jobs.
 	 *
 	 * @var int
 	 */
-	private $jobId;
+	private $jobId = 0;
+
+	/**
+	 * Number of the successful jobs
+	 *
+	 * @var int
+	 */
+	private $successfulJobs = 0;
+
+	/**
+	 * Number of the failed jobs
+	 *
+	 * @var int
+	 */
+	private $failedJobs = 0;
 
 	/**
 	 * Owner thread pool
@@ -1669,6 +1684,37 @@ abstract class Thread
 
 
 	/**
+	 * Returns number of the started jobs
+	 *
+	 * @return int
+	 */
+	public function getStartedJobs()
+	{
+		return $this->jobId;
+	}
+
+	/**
+	 * Returns number of the successful jobs
+	 *
+	 * @return int
+	 */
+	public function getSuccessfulJobs()
+	{
+		return $this->successfulJobs;
+	}
+
+	/**
+	 * Returns number of the failed jobs
+	 *
+	 * @return int
+	 */
+	public function getFailedJobs()
+	{
+		return $this->failedJobs;
+	}
+
+
+	/**
 	 * Returns last error code
 	 *
 	 * @return int|null
@@ -1815,13 +1861,19 @@ abstract class Thread
 			// Waiting
 			if ($wait = (self::STATE_WAIT === $state)) {
 				if ($this->jobStarted) {
-					// Should not be called
-					// @codeCoverageIgnoreStart
-					if (!$this->success && !$this->lastErrorCode) {
-						$this->lastErrorCode = self::ERR_OTHER;
-						$this->lastErrorMsg  = 'Worker stopped';
+					if ($this->success) {
+						$this->successfulJobs++;
+					} else {
+						$this->failedJobs++;
+
+						// Should not be called
+						// @codeCoverageIgnoreStart
+						if (!$this->lastErrorCode) {
+							$this->lastErrorCode = self::ERR_OTHER;
+							$this->lastErrorMsg  = 'Worker stopped';
+						}
+						// @codeCoverageIgnoreEnd
 					}
-					// @codeCoverageIgnoreEnd
 
 					$this->jobStarted = null;
 
