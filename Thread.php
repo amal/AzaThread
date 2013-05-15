@@ -480,17 +480,23 @@ abstract class Thread
 	/**
 	 * Initializes base parameters
 	 *
+	 * @param null       $pName   Thread worker process name
+	 * @param ThreadPool $pool    Thread pool instance (if needed)
+	 * @param bool       $debug   Whether to show debugging information
+	 * @param array      $options Thread options (array [property => value])
+	 *
 	 * @throw Exception if can't wait for the preforked thread
-	 *
-	 * @param bool             $debug Whether to show debugging information
-	 * @param string           $pName Thread worker process name
-	 * @param ThreadPool $pool  Thread pool
-	 *
-	 * @internal
 	 */
 	public function __construct($pName = null,
-		$pool = null, $debug = false)
+		$pool = null, $debug = false, array $options = null)
 	{
+		// Set options
+		if ($options) {
+			foreach ($options as $option => $value) {
+				$this->$option = $value;
+			}
+		}
+
 		// Prepare and save settings
 		$this->id = $id = ++self::$threadsCount;
 		$class = get_called_class();

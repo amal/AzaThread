@@ -10,6 +10,7 @@ use Aza\Components\Thread\ThreadPool;
 use InvalidArgumentException;
 use PHPUnit_Framework_TestCase as TestCase;
 use ReflectionMethod;
+use ReflectionProperty;
 
 /**
  * Testing thread system
@@ -102,6 +103,33 @@ class ThreadTest extends TestCase
 		$this->assertContains($value, $output);
 		$pool->cleanup();
 	}
+
+	/**
+	 * Tests external configured thread
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testExternalConfiguration()
+	{
+		Thread::$useForks = false;
+
+		$property = 'timeoutWorkerJobWait';
+		$expected = -mt_rand(100, 999);
+
+		$thread = new TestThreadReturnFirstArgument(
+			null, null, false, array($property => $expected)
+		);
+		$ref = new ReflectionProperty($thread, $property);
+		$ref->setAccessible(true);
+		$value = $ref->getValue($thread);
+		$this->assertSame($expected, $value);
+
+		$thread = new TestThreadReturnFirstArgument();
+		$value = $ref->getValue($thread);
+		$this->assertNotSame($expected, $value);
+	}
+
 
 
 	#region Synchronous (fallback mode) tests

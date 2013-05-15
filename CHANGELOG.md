@@ -4,6 +4,9 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+16.05.2013
+- **FEATURE:** Thread now can be configured externally (amal)
+
 13.05.2013
 - **FEATURE:** Threads statistics collection + API for accessing it via pool (Issue #4, amal)
 - **MINOR:** Additional tests (empty argument/result, thread hooks) (amal)
