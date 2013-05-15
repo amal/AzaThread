@@ -1,19 +1,41 @@
-AzaThread (old name - CThread)
-==============================
+AzaThread
+=========
 
 Anizoptera CMF simple and powerful threads emulation component for PHP (based on forks).
+Old name - CThread.
 
 https://github.com/Anizoptera/AzaThread
 
-[![Build Status](https://secure.travis-ci.org/Anizoptera/AzaThread.png?branch=master)](http://travis-ci.org/Anizoptera/AzaThread)
+[![Build Status][TravisImage]][Travis]
 
-Features:
+
+Table of Contents
+-----------------
+
+1. [Introduction](#introduction)
+2. [Requirements](#requirements)
+3. [Installation](#installation)
+4. [Examples](#examples)
+   * [Simply run processing asynchronously](#example-1---simply-run-processing-asynchronously)
+   * [Send argument and receive result of processing](#example-2---send-argument-and-receive-result-of-processing)
+   * [Triggering events from thread](#example-3---triggering-events-from-thread)
+   * [Use pool with 8 threads](#example-4---use-pool-with-8-threads)
+5. [Tests](#tests)
+6. [Credits](#credits)
+7. [License](#license)
+8. [Links](#links)
+
+
+Introduction
+------------
+
+**Features:**
 
 * Uses [forks](http://php.net/pcntl-fork) to operate asynchronously;
 * Supports synchronous compatibility mode if there are no required extensions;
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
-* Uses [libevent](http://php.net/libevent) with socket pairs for efficient inter-process communication;
+* Uses [libevent][] with socket pairs for efficient inter-process communication;
 * Supports two variants of data serialization for transfer (igbinary, native php serialization);
 * Transfer of events between the "thread" and the parent process;
 * Working with a thread pool with preservation of multiple use, passing arguments and receiving results;
@@ -21,17 +43,13 @@ Features:
 * Timeouts for work, child process waiting, initialization;
 * Maximum performance;
 
-AzaThread is a part of [Anizoptera CMF](https://github.com/Anizoptera), written by [Amal Samally](http://azagroup.ru/#amal) (amal.samally at gmail.com) and [AzaGroup](http://azagroup.ru/) team.
-
-Licensed under the MIT License.
-
 
 Requirements
 ------------
 
 * PHP 5.3.3 (or later);
 * Unix system;
-* [libevent](http://php.net/libevent);
+* [libevent][];
 * [pcntl](http://php.net/pcntl);
 * [posix](http://php.net/posix);
 * [AzaLibevent](https://github.com/Anizoptera/AzaLibEvent) - will be installed automatically with composer;
@@ -45,7 +63,7 @@ Installation
 ------------
 
 The recommended way to install AzaThread is [through composer](http://getcomposer.org).
-You can see [package information on Packagist.](https://packagist.org/packages/aza/thread)
+You can see [package information on Packagist][ComposerPackage].
 
 ```JSON
 {
@@ -64,7 +82,7 @@ Examples
 ```php
 class ExampleThread extends Thread
 {
-	protected function process()
+	function process()
 	{
 		// Some work here
 	}
@@ -79,7 +97,7 @@ $thread->wait()->run();
 ```php
 class ExampleThread extends Thread
 {
-	protected function process()
+	function process()
 	{
 		return $this->getParam(0);
 	}
@@ -96,7 +114,7 @@ class ExampleThread extends Thread
 {
 	const EV_PROCESS = 'process';
 
-	protected function process()
+	function process()
 	{
 		$events = $this->getParam(0);
 		for ($i = 0; $i < $events; $i++) {
@@ -179,13 +197,35 @@ Example:
     $ phpunit --configuration phpunit.xml.dist
 
 
+Credits
+-------
+
+AzaThread is a part of [Anizoptera CMF][], written by [Amal Samally][] (amal.samally at gmail.com) and [AzaGroup][] team.
+
+
 License
 -------
 
-MIT, see [LICENSE.md](LICENSE.md)
+Released under the [MIT](LICENSE.md) license.
 
 
 Links
 -----
 
-[AzaThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
+* [Composer package][ComposerPackage]
+* [Last build on the Travis CI][Travis]
+* [Project profile on the Ohloh](https://www.ohloh.net/p/AzaThread)
+* (RU) [AzaThread — многопоточность для PHP с блэкджеком](http://habrahabr.ru/blogs/php/134501/)
+* Other Anizoptera CMF components on the [GitHub][Anizoptera CMF] / [Packagist](https://packagist.org/packages/aza)
+* (RU) [AzaGroup team blog][AzaGroup]
+
+
+
+[libevent]: http://php.net/libevent
+
+[Anizoptera CMF]:  https://github.com/Anizoptera
+[Amal Samally]:    http://azagroup.ru/about/#amal
+[AzaGroup]:        http://azagroup.ru/
+[ComposerPackage]: https://packagist.org/packages/aza/thread
+[TravisImage]:     https://secure.travis-ci.org/Anizoptera/AzaThread.png?branch=master
+[Travis]:          http://travis-ci.org/Anizoptera/AzaThread

@@ -4,6 +4,7 @@ namespace Aza\Components\Thread;
 use Aza\Components\Socket\Socket;
 
 require __DIR__ . '/../vendor/autoload.php';
+//require __DIR__ . '/../../../../example.bootstrap.php';
 
 
 /**
@@ -24,40 +25,40 @@ require __DIR__ . '/../vendor/autoload.php';
  *
  * IPC (empty jobs):
  *
- * 20219	- 1 thread (Sync)
- * 19900	- 1 thread (Sync, Data transfer)
+ * 20219 - 1 thread (Sync)
+ * 19900 - 1 thread (Sync, Data transfer)
  *
- * 4460		- 1 thread (Async)
- * 3082		- 1 thread (Async, Data transfer)
+ * 4460  - 1 thread (Async)
+ * 3082  - 1 thread (Async, Data transfer)
  *
- * 5224		- 2 threads (Async)
- * 3894		- 2 threads (Async, Data transfer)
+ * 5224  - 2 threads (Async)
+ * 3894  - 2 threads (Async, Data transfer)
  *
- * 5718		- 4 threads (Async)
- * 4295		- 4 threads (Async, Data transfer)
+ * 5718  - 4 threads (Async)
+ * 4295  - 4 threads (Async, Data transfer)
  *
- * 5806		- 8 threads (Async)
- * 4371		- 8 threads (Async, Data transfer)
+ * 5806  - 8 threads (Async)
+ * 4371  - 8 threads (Async, Data transfer)
  *
- * 5842		- 10 threads (Async)
- * 4303		- 10 threads (Async, Data transfer)
+ * 5842  - 10 threads (Async)
+ * 4303  - 10 threads (Async, Data transfer)
  *
- * 5890		- 12 threads (Async)
- * 4333		- 12 threads (Async, Data transfer)
+ * 5890  - 12 threads (Async)
+ * 4333  - 12 threads (Async, Data transfer)
  *
- * 6018		- 16 threads (Async)
- * 4234		- 16 threads (Async, Data transfer)
+ * 6018  - 16 threads (Async)
+ * 4234  - 16 threads (Async, Data transfer)
  *
  * Working jobs:
  *
- * 553	- 1 thread (Sync)
- * 330	- 1 thread (Async)
- * 580	- 2 threads (Async)
- * 1015	- 4 threads (Async)
- * 1040	- 8 threads (Async)
- * 1027	- 10 threads (Async)
- * 970	- 12 threads (Async)
- * 958	- 16 threads (Async)
+ * 553  - 1 thread (Sync)
+ * 330  - 1 thread (Async)
+ * 580  - 2 threads (Async)
+ * 1015 - 4 threads (Async)
+ * 1040 - 8 threads (Async)
+ * 1027 - 10 threads (Async)
+ * 970  - 12 threads (Async)
+ * 958  - 16 threads (Async)
  *
  * =================================================
  *
@@ -65,42 +66,42 @@ require __DIR__ . '/../vendor/autoload.php';
  *
  * IPC (empty jobs):
  *
- * 26394	- 1 thread (Sync)
- * 25032	- 1 thread (Sync, Data transfer)
+ * 26394 - 1 thread (Sync)
+ * 25032 - 1 thread (Sync, Data transfer)
  *
- * 4928		- 1 thread (Async)
- * 4164		- 1 thread (Async, Data transfer)
+ * 4928  - 1 thread (Async)
+ * 4164  - 1 thread (Async, Data transfer)
  *
- * 7210		- 2 threads (Async)
- * 5910		- 2 threads (Async, Data transfer)
+ * 7210  - 2 threads (Async)
+ * 5910  - 2 threads (Async, Data transfer)
  *
- * 7129		- 4 threads (Async)
- * 6261		- 4 threads (Async, Data transfer)
+ * 7129  - 4 threads (Async)
+ * 6261  - 4 threads (Async, Data transfer)
  *
- * 7633		- 8 threads (Async)
- * 6630		- 8 threads (Async, Data transfer)
+ * 7633  - 8 threads (Async)
+ * 6630  - 8 threads (Async, Data transfer)
  *
- * 7810		- 10 threads (Async)
- * 6715		- 10 threads (Async, Data transfer)
+ * 7810  - 10 threads (Async)
+ * 6715  - 10 threads (Async, Data transfer)
  *
- * 7641		- 12 threads (Async)
- * 6540		- 12 threads (Async, Data transfer)
+ * 7641  - 12 threads (Async)
+ * 6540  - 12 threads (Async, Data transfer)
  *
- * 7587		- 16 threads (Async)
- * 6514		- 16 threads (Async, Data transfer)
+ * 7587  - 16 threads (Async)
+ * 6514  - 16 threads (Async, Data transfer)
  *
  * Working jobs:
  *
- * 763	- 1 thread (Sync)
- * 669	- 1 thread (Async)
- * 1254	- 2 threads (Async)
- * 2188	- 4 threads (Async)
- * 2618	- 8 threads (Async)
- * 2719	- 10 threads (Async)
- * 2739	- 12 threads (Async)
- * 2904	- 16 threads (Async)
- * 2830	- 18 threads (Async)
- * 2730	- 20 threads (Async)
+ * 763  - 1 thread (Sync)
+ * 669  - 1 thread (Async)
+ * 1254 - 2 threads (Async)
+ * 2188 - 4 threads (Async)
+ * 2618 - 8 threads (Async)
+ * 2719 - 10 threads (Async)
+ * 2739 - 12 threads (Async)
+ * 2904 - 16 threads (Async)
+ * 2830 - 18 threads (Async)
+ * 2730 - 20 threads (Async)
  *
  * =================================================
  */
@@ -115,16 +116,18 @@ require __DIR__ . '/../vendor/autoload.php';
 $data    = true;  // Transmit data
 $work    = true;  // Do some work
 $tests   = 6;     // Number of iterations in tests
-$jobsT   = 10000; // Number of jobs to do in one thread
-$jobsP   = 20000; // Number of jobs to do in pools
+$jobsT   = $work ? 2500  : 10000;  // Number of jobs to do in one thread
+$jobsP   = $work ? 10000 : 20000; // Number of jobs to do in pools
 $poolMin = 2;     // Minimum threads number in pool to test
 
 // Disable to use sync mode
-// Thread::$useForks = false;
+//Thread::$useForks = false;
 
 // Manually specify the type of data transfer between threads
-// Thread::$ipcDataMode = Thread::IPC_IGBINARY;
+//Thread::$ipcDataMode = Thread::IPC_IGBINARY;
 
+// Use stream sockets
+//Socket::$useSockets = false;
 
 
 
@@ -143,9 +146,7 @@ class TestThreadNothing extends Thread
 	 *
 	 * @return mixed
 	 */
-	protected function process()
-	{
-	}
+	function process() {}
 }
 
 /**
@@ -158,7 +159,7 @@ class TestThreadReturn extends Thread
 	 *
 	 * @return mixed
 	 */
-	protected function process()
+	function process()
 	{
 		return array(123456789, 'abcdefghigklmnopqrstuvwxyz', 123.7456328);
 	}
@@ -174,7 +175,7 @@ class TestThreadWork extends Thread
 	 *
 	 * @return mixed
 	 */
-	protected function process()
+	function process()
 	{
 		$r = null;
 		$i = 1000;
