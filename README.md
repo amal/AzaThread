@@ -20,6 +20,7 @@ Table of Contents
    * [Send argument and receive result of processing](#example-2---send-argument-and-receive-result-of-processing)
    * [Triggering events from thread](#example-3---triggering-events-from-thread)
    * [Use pool with 8 threads](#example-4---use-pool-with-8-threads)
+   * [Thread closure](#example-5---thread-closure)
 5. [Tests](#tests)
 6. [Credits](#credits)
 7. [License](#license)
@@ -179,6 +180,16 @@ do {
 
 // Terminating all child processes. Cleanup of resources used by the pool.
 $pool->cleanup();
+```
+
+#### Example #5 - Thread closure
+
+You can use simple threads crating with closures. Such threads are not preforked by default and not multitask too. You can change it via the second argument of `SimpleThread::create`.
+
+```php
+$result = SimpleThread::create(function($arg) {
+	return $arg;
+})->run(123)->wait()->getResult();
 ```
 
 

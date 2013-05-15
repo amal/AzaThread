@@ -5,6 +5,7 @@ use Aza\Components\CliBase\Base;
 use Aza\Components\Log\Logger;
 use Aza\Components\Socket\Socket;
 use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Components\Thread\SimpleThread;
 use Aza\Components\Thread\Thread;
 use Aza\Components\Thread\ThreadPool;
 use InvalidArgumentException;
@@ -261,6 +262,18 @@ class ThreadTest extends TestCase
 	{
 		Thread::$useForks = false;
 		$this->processThread(false, true, false, true);
+	}
+
+	/**
+	 * Closure thread test (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadClosure()
+	{
+		Thread::$useForks = false;
+		$this->processThreadClosure(false);
 	}
 
 
@@ -584,6 +597,24 @@ class ThreadTest extends TestCase
 		$testCase = $this;
 		$this->processAsyncTest(function() use ($testCase) {
 			$testCase->processThread(false, true, false, true);
+		}, true);
+	}
+
+	/**
+	 * Closure thread test
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadClosure()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThreadClosure(false);
 		}, true);
 	}
 
@@ -1197,16 +1228,6 @@ class ThreadTest extends TestCase
 					: new TestThreadReturnFirstArgument(null, null, $debug);
 		}
 
-		if ($async) {
-			$this->assertNotEmpty($thread->getEventLoop());
-			$this->assertNotEmpty($thread->getPid());
-			$this->assertNotEmpty($thread->getParentPid());
-		} else {
-			$this->assertEmpty($thread->getPid());
-			$this->assertEmpty($thread->getParentPid());
-			$this->assertEmpty($thread->getEventLoop());
-		}
-
 		// You can override preforkWait property
 		// to TRUE to not wait thread at first time manually
 		$thread->wait();
@@ -1295,19 +1316,47 @@ class ThreadTest extends TestCase
 		$thread->cleanup();
 
 
-		// Hooks
+		// Hooks, etc.
 		$thread = new TestThreadHooks(
 			null, null, $debug
 		);
+
+		$isAlive = new ReflectionMethod($thread, 'isAlive');
+		$isAlive->setAccessible(true);
+		if ($async) {
+			$this->assertNotEmpty($thread->getEventLoop());
+			$this->assertNotEmpty($thread->getPid());
+			$this->assertNotEmpty($thread->getParentPid());
+			$this->assertNotEmpty($thread->getChildPid());
+			$this->assertTrue($thread->getIsForked());
+			$this->assertTrue($isAlive->invoke($thread));
+		} else {
+			$this->assertEmpty($thread->getEventLoop());
+			$this->assertEmpty($thread->getPid());
+			$this->assertEmpty($thread->getParentPid());
+			$this->assertEmpty($thread->getChildPid());
+			$this->assertFalse($thread->getIsForked());
+			$this->assertFalse($isAlive->invoke($thread));
+		}
+
 		$this->assertSame(1, $thread->onLoadHookCalls);
 		$this->assertSame(
 			$async ? 0 : 1,
 			$thread->onForkHookCalls
 		);
 		$this->assertSame(0, $thread->onShutdownHookCalls);
+		$this->assertSame(0, $thread->onCleanupHookCalls);
 		$thread->wait()->run()->wait();
 		$this->assertTrue($thread->getSuccess(), 'Job failure');
-		$this->assertSame(array(1, 1, 0), $thread->getResult());
+		$this->assertSame(array(1, 1, 0, 0), $thread->getResult());
+		$thread->cleanup();
+		$this->assertSame(1, $thread->onLoadHookCalls);
+		$this->assertSame(
+			$async ? 0 : 1,
+			$thread->onForkHookCalls
+		);
+		$this->assertSame(0, $thread->onShutdownHookCalls);
+		$this->assertSame(1, $thread->onCleanupHookCalls);
 	}
 
 	/**
@@ -1460,6 +1509,52 @@ class ThreadTest extends TestCase
 			);
 		}
 
+		$thread->cleanup();
+	}
+
+	/**
+	 * Closure thread
+	 *
+	 * @param bool $debug
+	 */
+	function processThreadClosure($debug = false)
+	{
+		$async = Thread::$useForks;
+		if ($debug) {
+			echo '-----------------------', PHP_EOL,
+			"Closure thread test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
+			'-----------------------', PHP_EOL;
+		}
+
+
+		// ----
+		$expected = mt_rand(999, 99999);
+		$thread = SimpleThread::create(function() use ($expected) {
+			return $expected;
+		}, null, $debug);
+		$result = $thread->run()->wait()->getResult();
+		$this->assertSame($expected, $result);
+
+
+		// ----
+		$result = $thread->run()->wait()->getResult();
+		$this->assertSame($expected, $result);
+		$thread->cleanup();
+
+
+		// ----
+		$expected = mt_rand(999, 99999);
+		$thread = SimpleThread::create(function($arg) {
+			return $arg;
+		}, null, $debug);
+		$result = $thread->run($expected)->wait()->getResult();
+		$this->assertSame($expected, $result);
+
+
+		// ----
+		$expected = mt_rand(999, 99999);
+		$result = $thread->run($expected)->wait()->getResult();
+		$this->assertSame($expected, $result);
 		$thread->cleanup();
 	}
 
@@ -2221,6 +2316,9 @@ class TestThreadHooks extends TestThreadReturnFirstArgument
 	/** @var int */
 	public $onShutdownHookCalls = 0;
 
+	/** @var int */
+	public $onCleanupHookCalls = 0;
+
 
 	/**
 	 * {@inheritdoc}
@@ -2246,6 +2344,14 @@ class TestThreadHooks extends TestThreadReturnFirstArgument
 		$this->onShutdownHookCalls++;
 	}
 
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function onCleanup()
+	{
+		$this->onCleanupHookCalls++;
+	}
+
 
 	/**
 	 * {@inheritdoc}
@@ -2255,7 +2361,8 @@ class TestThreadHooks extends TestThreadReturnFirstArgument
 		return array(
 			$this->onLoadHookCalls,
 			$this->onForkHookCalls,
-			$this->onShutdownHookCalls
+			$this->onShutdownHookCalls,
+			$this->onCleanupHookCalls
 		);
 	}
 }

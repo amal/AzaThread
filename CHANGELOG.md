@@ -5,6 +5,8 @@ CHANGELOG
 
 
 16.05.2013
+- **FEATURE:** Simple API for closure thread - `SimpleThread` class (amal)
+- **FEATURE:** New `onCleanup` hook (amal)
 - **FEATURE:** Thread now can be configured externally (amal)
 
 13.05.2013

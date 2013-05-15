@@ -482,7 +482,7 @@ abstract class Thread
 	 *
 	 * @param null       $pName   Thread worker process name
 	 * @param ThreadPool $pool    Thread pool instance (if needed)
-	 * @param bool       $debug   Whether to show debugging information
+	 * @param bool       $debug   Whether to output debugging information
 	 * @param array      $options Thread options (array [property => value])
 	 *
 	 * @throw Exception if can't wait for the preforked thread
@@ -774,7 +774,8 @@ abstract class Thread
 			return;
 		}
 		$this->isCleaning = true;
-		$this->state = self::STATE_TERM;
+		$this->state      = self::STATE_TERM;
+		$notForced        = !$forced;
 
 		// @codeCoverageIgnoreStart
 		($debug = $this->debug) && $this->debug(
@@ -788,6 +789,17 @@ abstract class Thread
 		$isMaster = !$this->isChild;
 
 
+		// On cleanup hook
+		if ($notForced) {
+			// @codeCoverageIgnoreStart
+			$debug && $this->debug(
+				self::D_INIT . "Call on cleanup hook"
+			);
+			// @codeCoverageIgnoreEnd
+			$this->onCleanup();
+		}
+
+
 		// External event listeners
 		$this->listeners = array();
 
@@ -795,7 +807,7 @@ abstract class Thread
 		// Threads pool
 		if ($pool = $this->pool) {
 			// Basic cleanup
-			if (!$forced) {
+			if ($notForced) {
 				$pool->unregisterThread($id);
 
 				// @codeCoverageIgnoreStart
@@ -819,7 +831,7 @@ abstract class Thread
 
 		// Stop child process
 		$base = self::$eventLoop;
-		if (!$forced && $isMaster && $this->isForked) {
+		if ($notForced && $isMaster && $this->isForked) {
 			// TODO: Don't wait, check after cleanup?
 			$this->stopWorker();
 			// @codeCoverageIgnoreStart
@@ -840,7 +852,7 @@ abstract class Thread
 
 
 		// Timer events
-		if (!$forced && $base && $base->resource) {
+		if ($notForced && $base && $base->resource) {
 			// Check for non-triggered events in loop
 			$base->loop(EVLOOP_NONBLOCK);
 			foreach ($this->eventsTimers as $t) {
@@ -856,18 +868,18 @@ abstract class Thread
 
 
 		// Pipe events (master/child)
-		if (!$forced) {
+		if ($notForced) {
 			// @codeCoverageIgnoreStart
 			if ($this->masterEvent) {
 				$this->masterEvent->free();
-				$debug && !$forced &&  $this->debug(
+				$debug && $notForced &&  $this->debug(
 					self::D_CLEAN . 'Master pipe event cleaned'
 					. " (e{$this->masterEvent->id})"
 				);
 			}
 			if ($this->childEvent) {
 				$this->childEvent->free();
-				$debug && !$forced &&  $this->debug(
+				$debug && $notForced &&  $this->debug(
 					self::D_CLEAN . 'Child pipe event cleaned'
 					. " (e{$this->childEvent->id})"
 				);
@@ -904,7 +916,7 @@ abstract class Thread
 		}
 
 
-		if (!$forced) {
+		if ($notForced) {
 			// Signal events
 			$slotName = (int)$isMaster;
 			if (!$isMaster || !self::$threads) {
@@ -1271,6 +1283,14 @@ abstract class Thread
 	 * @codeCoverageIgnore Called only in child (can't get coverage from another process)
 	 */
 	protected function onShutdown() {}
+
+	/**
+	 * Hook called before full cleanup.
+	 * Override if you need custom cleanup logic.
+	 *
+	 * @see cleanup
+	 */
+	protected function onCleanup() {}
 
 	/**
 	 * Main processing.
