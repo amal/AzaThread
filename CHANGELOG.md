@@ -5,6 +5,8 @@ CHANGELOG
 
 
 16.05.2013
+- **MINOR:** Small improvements and fixes (amal)
+- **IMPROVED:** IPC optimizations (8-10% speedup) (amal)
 - **FEATURE:** Simple API for closure thread - `SimpleThread` class (amal)
 - **FEATURE:** New `onCleanup` hook (amal)
 - **FEATURE:** Thread now can be configured externally (amal)

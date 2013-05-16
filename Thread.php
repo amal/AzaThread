@@ -1508,7 +1508,7 @@ abstract class Thread
 
 			// Add packet to buffer
 			$this->sendPacketToParent(
-				self::P_EVENT, $event, $data
+				self::P_EVENT, array($event, $data)
 			);
 
 			// Enable deferred waiting for read confirmation
@@ -1839,7 +1839,7 @@ abstract class Thread
 		// @codeCoverageIgnoreStart
 		if ($this->isChild) {
 			$this->sendPacketToParent(
-				self::P_JOB, null, array($jobId, $result)
+				self::P_JOB, array($jobId, $result)
 			);
 		}
 		// @codeCoverageIgnoreEnd
@@ -2025,7 +2025,7 @@ abstract class Thread
 			));
 
 			// Job packet
-			if ($packet & self::P_JOB) {
+			if (self::P_JOB & $packet) {
 				list($jobId, $args) = $this->peekPacketData($p['data']);
 
 				$debug && $this->debug(
@@ -2037,7 +2037,7 @@ abstract class Thread
 			}
 
 			// Event read confirmation
-			else if ($packet & self::P_EVENT) {
+			else if (self::P_EVENT & $packet) {
 				$debug && $this->debug(
 					self::D_IPC . ' => Packet: event read confirmation '
 					.'received. Unlocking thread'
@@ -2184,25 +2184,15 @@ abstract class Thread
 				// @codeCoverageIgnoreStart
 				self::$eventLoop->loopBreak();
 				throw new Exception(sprintf(
-					"Packet [0x%x:%s] for unknown thread #%d",
-					$packet, $p['value'], $threadId
+					"Packet [0x%x] for unknown thread #%d",
+					$packet, $threadId
 				));
 				// @codeCoverageIgnoreEnd
 			}
 			$thread = self::$threads[$threadId];
 
 			// Packet data
-			$data = $p['data'];
-			if ('' != $data) {
-				$data = $this->peekPacketData($data);
-				// @codeCoverageIgnoreStart
-				$debug && $this->debug(
-					self::D_IPC . ' <= Packet: data received'
-				);
-				// @codeCoverageIgnoreEnd
-			} else {
-				$data = null;
-			}
+			$data = $this->peekPacketData($p['data']);
 
 			// State packet
 			if (self::P_STATE & $packet) {
@@ -2211,7 +2201,7 @@ abstract class Thread
 					self::D_IPC . ' <= Packet: state'
 				);
 				// @codeCoverageIgnoreEnd
-				$thread->setState((int)$p['value']);
+				$thread->setState((int)$data);
 			}
 
 			// Event packet
@@ -2229,7 +2219,7 @@ abstract class Thread
 					// @codeCoverageIgnoreEnd
 					$thread->sendPacketToChild(self::P_EVENT);
 				}
-				$thread->trigger($p['value'], $data);
+				$thread->trigger($data[0], $data[1]);
 			}
 
 			// Job (result) packet
@@ -2415,9 +2405,6 @@ abstract class Thread
 	 * @param int $packet <p>
 	 * Integer packet type (see self::P_* constants)
 	 * </p>
-	 * @param string $value [optional] <p>
-	 * Packet value (without ":" character)
-	 * </p>
 	 * @param mixed $data [optional] <p>
 	 * Mixed packet data
 	 * </p>
@@ -2426,13 +2413,11 @@ abstract class Thread
 	 *
 	 * @codeCoverageIgnore Called only in child (can't get coverage from another process)
 	 */
-	private function sendPacketToParent($packet, $value = '', $data = null)
+	private function sendPacketToParent($packet, $data = null)
 	{
-		$debug = $this->debug;
-
 		// Deferred waiting for read confirmation
 		if ($this->waiting) {
-			$debug && $this->debug(
+			($debug = $this->debug) && $this->debug(
 				self::D_INFO . "[eventLocking] Child is locked. "
 				."Waiting for event read confirmation "
 				."({$this->timeoutWorkerJobWait} seconds maximum)"
@@ -2454,9 +2439,7 @@ abstract class Thread
 		}
 
 		$this->childEvent->write(
-			$this->preparePacket(
-				$packet, $data, $value, false
-			)
+			$this->preparePacket($packet, $data, false)
 		);
 	}
 
@@ -2524,10 +2507,6 @@ abstract class Thread
 		$buf = $e->readAll($maxReadSize);
 
 		// @codeCoverageIgnoreStart
-		if ('' === $buf) {
-			// Should not be called
-			return array();
-		}
 		$debug && $this->debug(
 			self::D_IPC . "    Read ".strlen($buf)."b; "
 			. strlen($buffer)."b in buffer"
@@ -2536,8 +2515,13 @@ abstract class Thread
 
 		// TODO: Limit the maximum buffer length?
 		$buffer .= $buf;
-		unset($buf);
 
+		// @codeCoverageIgnoreStart
+		if ('' === $buffer) {
+			// Should not be called
+			return array();
+		}
+		// @codeCoverageIgnoreEnd
 
 		$packets = array();
 		do {
@@ -2557,88 +2541,68 @@ abstract class Thread
 					}
 					$buffer = substr($buffer, $pos);
 				}
-				// Incorrect packet (should not be called)
-				if (strlen($buffer) < 7) {
-					$error = "Packet must contain at least 7 characters";
-					$debug && $this->debug(self::D_WARN . $error);
-					self::$eventLoop->loopBreak();
-					throw new Exception($error);
-				}
 				// @codeCoverageIgnoreEnd
 
 				$curPacket = unpack(
-					'Cpacket/CvalueLength/NdataLength',
-					substr($buffer, 1, 6)
+					'Cpacket/NdataLength',
+					substr($buffer, 1, 5)
 				);
-				$curPacket['value'] =
-				$curPacket['data'] = '';
-				$buffer = substr($buffer, 7);
+				$buffer = substr($buffer, 6);
 
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(sprintf(
 					"%s    Packet started [0x%x]; "
-						."%d bytes data; %d bytes value",
+						."%d bytes data",
 					self::D_IPC, $curPacket['packet'],
-					$curPacket['dataLength']-$curPacket['valueLength'],
-					$curPacket['valueLength']
+					$curPacket['dataLength']
 				));
 				// @codeCoverageIgnoreEnd
 			} else {
 				// @codeCoverageIgnoreStart
 				$debug && $this->debug(sprintf(
 					"%s    Packet continue [0x%x]; %d bytes data; "
-						."%d bytes value; %d bytes read",
+						. "%d bytes read",
 					self::D_IPC, $curPacket['packet'],
-					$curPacket['dataLength']-$curPacket['valueLength'],
-					$curPacket['valueLength'],
-					strlen($buffer)
+					$curPacket['dataLength'], strlen($buffer)
 				));
 				// @codeCoverageIgnoreEnd
 			}
 
-			if ($dataLen = $curPacket['dataLength']) {
-				if (strlen($buffer) < $dataLen) {
-					return $packets;
+			if (($bufferLen = strlen($buffer))
+			    < ($dataLen = $curPacket['dataLength'])
+			) {
+				return $packets;
+			} else if ($dataLen) {
+				if ($dataLen === $bufferLen) {
+					$curPacket['data'] = $buffer;
+					$buffer            = '';
+				} else {
+					$curPacket['data'] = substr($buffer, 0, $dataLen);
+					$buffer            = substr($buffer, $dataLen);
 				}
-				if ($valLen = $curPacket['valueLength']) {
-					$curPacket['value'] = substr($buffer, 0, $valLen);
-				}
-				$_dataLen = $dataLen;
-				if ($dataLen -= $valLen) {
-					$curPacket['data'] = substr($buffer, $valLen, $dataLen);
-				}
-				$buffer = substr($buffer, $_dataLen);
 			} else {
 				// Should not be called
 				// @codeCoverageIgnoreStart
-				$valLen = 0;
+				$curPacket['data'] = '';
 				// @codeCoverageIgnoreEnd
 			}
 
 			// Debugging
 			// @codeCoverageIgnoreStart
 			if ($debug) {
-				$rDataLen = strlen($curPacket['data']);
-				$rValLen  = strlen($curPacket['value']);
-				if ($dataLen != $rDataLen) {
-					$error = "Packet data length header ({$dataLen})"
-						." does not match the actual length of the data"
-						." ({$rDataLen})";
-				} else if ($valLen != $rValLen) {
-					$error = "Packet value length header ({$valLen})"
-						." does not match the actual length of the value"
-						." ({$rValLen})";
-				}
-				if (!empty($error)) {
-					$this->debug(self::D_WARN . $error);
+				if ($dataLen != $rDataLen = strlen($curPacket['data'])) {
 					self::$eventLoop->loopBreak();
+					$error = "Packet data length header ({$dataLen})"
+					         ." does not match the actual length of the data"
+					         ." ({$rDataLen})";
+					$this->debug(self::D_WARN . $error);
 					throw new Exception($error);
 				}
 				$this->debug(sprintf(
 					"%s    Packet completed [0x%x]; %d bytes data; "
-						."%d bytes value; %d bytes left in buffer",
+						. "%d bytes left in buffer",
 					self::D_IPC, $curPacket['packet'],
-					$dataLen, $valLen, strlen($buffer)
+					$dataLen, strlen($buffer)
 				));
 			}
 			// @codeCoverageIgnoreEnd
@@ -2678,39 +2642,21 @@ abstract class Thread
 	 *
 	 * @param int    $packet  Integer packet type (see self::P_* constants)
 	 * @param string $data    Packet data
-	 * @param string $value   Packet value
 	 * @param bool   $toChild Packet is for child
 	 *
 	 * @return string
 	 */
-	private function preparePacket($packet, $data, $value = '', $toChild = true)
+	private function preparePacket($packet, $data, $toChild = true)
 	{
 		// Prepare data
-		$data = isset($data)
+		$data = '' != $data
 				? ((self::IPC_IGBINARY === self::$ipcDataMode)
 						? igbinary_serialize($data)
 						: serialize($data))
 				: '';
 
-		// Prepare value
-		$value     = (string)$value;
-		$valLength = strlen($value);
-		if (0xFF < $valLength) {
-			// Should not be called
-			// @codeCoverageIgnoreStart
-			$error = "Packet value is too long ($valLength). "
-			         ."Maximum length is 255 characters.";
-			$this->debug(self::D_WARN . $error);
-			self::$eventLoop->loopBreak();
-			throw new Exception($error);
-			// @codeCoverageIgnoreEnd
-		}
-
 		// Build packet
-		$_packet = "\x80"
-					. pack('CCN', $packet, $valLength, strlen($data)+$valLength)
-					. $value
-					. $data;
+		$_packet = "\x80" . pack('CN', $packet, strlen($data)) . $data;
 
 		// Debugging
 		// @codeCoverageIgnoreStart
@@ -2725,12 +2671,12 @@ abstract class Thread
 			$this->debug(sprintf(
 				"%s    %s Sending packet%s to %s [0x%x]",
 				self::D_IPC, $arr,
-				'' == $data ? ' (with data)' : '',
+				'' == $data ? '' : ' (with data)',
 				$n, $packet
 			));
 			$this->debug(sprintf(
-				"%s    %s %d bytes length (%d bytes data and %d bytes value)",
-				self::D_IPC, $arr, strlen($_packet), strlen($data), $valLength
+				"%s    %s %d bytes length (%d bytes data)",
+				self::D_IPC, $arr, strlen($_packet), strlen($data)
 			));
 		}
 		// @codeCoverageIgnoreEnd
