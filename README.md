@@ -3,7 +3,7 @@ AzaThread. We've moved!
 
 Go to the new repo: [Anizoptera/AzaThread](https://github.com/Anizoptera/AzaThread).
 
-Anizoptera CMF is a simple and powerful threads emulation component for PHP (based on forks).
+Simple and powerful threads emulation component for PHP (based on forks).
 
 
 License
