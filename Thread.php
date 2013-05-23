@@ -175,7 +175,7 @@ abstract class Thread
 	/**
 	 * Maximum timeout for master to wait for worker initialization (prefork)
 	 * (in seconds, can be fractional).
-	 * Set it to less than one, to disable.
+	 * Set it to less than zero, to disable.
 	 *
 	 * @see prefork
 	 * @see preforkWait
@@ -185,7 +185,7 @@ abstract class Thread
 	/**
 	 * Maximum timeout for master to wait for the job results
 	 * (in seconds, can be fractional).
-	 * Set it to less than one, to disable.
+	 * Set it to less than zero, to disable.
 	 */
 	protected $timeoutMasterResultWait = 5;
 
@@ -193,7 +193,7 @@ abstract class Thread
 	 * Maximum timeout for worker to wait for the new job
 	 * (in seconds, can be fractional).
 	 * After it spawned child will die.
-	 * Set it to less than one, to disable.
+	 * Set it to less than zero, to disable.
 	 * Already this timeout is used with event locking.
 	 */
 	protected $timeoutWorkerJobWait = 600;

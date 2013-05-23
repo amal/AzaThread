@@ -1,7 +1,7 @@
 AzaThread
 =========
 
-Anizoptera CMF simple and powerful threads emulation component for PHP (based on forks).
+Simple and powerful threads emulation component for PHP (based on forks).
 Old name - CThread.
 
 https://github.com/Anizoptera/AzaThread
@@ -15,12 +15,7 @@ Table of Contents
 1. [Introduction](#introduction)
 2. [Requirements](#requirements)
 3. [Installation](#installation)
-4. [Examples](#examples)
-   * [Simply run processing asynchronously](#example-1---simply-run-processing-asynchronously)
-   * [Send argument and receive result of processing](#example-2---send-argument-and-receive-result-of-processing)
-   * [Triggering events from thread](#example-3---triggering-events-from-thread)
-   * [Use pool with 8 threads](#example-4---use-pool-with-8-threads)
-   * [Thread closure](#example-5---thread-closure)
+4. [Documentation and examples](#documentation-and-examples)
 5. [Tests](#tests)
 6. [Credits](#credits)
 7. [License](#license)
@@ -36,13 +31,13 @@ Introduction
 * Supports synchronous compatibility mode if there are no required extensions;
 * Reuse of the child processes;
 * Full exchange of data between processes. Sending arguments, receiving results;
-* Uses [libevent][] with socket pairs for efficient inter-process communication;
-* Supports two variants of data serialization for transfer (igbinary, native php serialization);
 * Transfer of events between the "thread" and the parent process;
 * Working with a thread pool with preservation of multiple use, passing arguments and receiving results;
+* Uses [libevent][] with socket pairs for efficient inter-process communication;
+* Supports two variants of data serialization for transfer (igbinary, native php serialization);
 * Errors handling;
 * Timeouts for work, child process waiting, initialization;
-* Maximum performance;
+* Maximum performance and customization;
 
 
 Requirements
@@ -75,123 +70,10 @@ You can see [package information on Packagist][ComposerPackage].
 ```
 
 
-Examples
---------
+Documentation and examples
+--------------------------
 
-#### Example #1 - Simply run processing asynchronously
-
-```php
-class ExampleThread extends Thread
-{
-	function process()
-	{
-		// Some work here
-	}
-}
-
-$thread = new ExampleThread();
-$thread->wait()->run();
-```
-
-#### Example #2 - Send argument and receive result of processing
-
-```php
-class ExampleThread extends Thread
-{
-	function process()
-	{
-		return $this->getParam(0);
-	}
-}
-
-$thread = new ExampleThread();
-$result = $thread->wait()->run(123)->wait()->getResult();
-```
-
-#### Example #3 - Triggering events from thread
-
-```php
-class ExampleThread extends Thread
-{
-	const EV_PROCESS = 'process';
-
-	function process()
-	{
-		$events = $this->getParam(0);
-		for ($i = 0; $i < $events; $i++) {
-			$event_data = $i;
-			$this->trigger(self::EV_PROCESS, $event_data);
-		}
-	}
-}
-
-// Additional argument.
-$additionalArgument = 123;
-
-$thread->bind(ExampleThread::EV_PROCESS, function($event_name, $event_data, $additional_arg)  {
-	// Event handling
-}, $additionalArgument);
-
-$events = 10; // number of events to trigger
-
-// You can override preforkWait property
-// to TRUE to not wait thread at first time manually
-$thread->wait();
-
-$thread = new ExampleThread();
-$thread->run($events)->wait();
-```
-
-#### Example #4 - Use pool with 8 threads
-
-```php
-$threads = 8  // Number of threads
-$pool = new ThreadPool('ExampleThread', $threads);
-
-$num = 25;    // Number of tasks
-$left = $num; // Remaining number of tasks
-
-do {
-	// If the pool  has waiting threads
-	// And we still have tasks to perform
-	while ($pool->hasWaiting() && $left > 0) {
-		// You get thread id after start
-		$threadId = $pool->run();
-		$left--;
-	}
-	if ($results = $pool->wait($failed)) {
-		foreach ($results as $threadId => $result) {
-			// Successfully completed task
-			// Result can be identified
-			// with thread id ($threadId)
-			$num--;
-		}
-	}
-	if ($failed) {
-		// Error handling.
-		// The work is completed unsuccessfully
-		// if the child process has died at run time or
-		// work timeout exceeded.
-		foreach ($failed as $threadId) {
-			$left++;
-		}
-	}
-} while ($num > 0);
-
-// Terminating all child processes. Cleanup of resources used by the pool.
-$pool->cleanup();
-```
-
-#### Example #5 - Thread closure
-
-You can use simple threads crating with closures. Such threads are not preforked by default and not multitask too. You can change it via the second argument of `SimpleThread::create`.
-
-```php
-$result = SimpleThread::create(function($arg) {
-	return $arg;
-})->run(123)->wait()->getResult();
-```
-
+See [full documentation](docs/en/0.Index.md) and [main examples](docs/en/Examples.md). Documentation is available in several languages​​!
 
 Other examples can be seen in the file [examples/example.php](examples/example.php) and in unit test [Tests/ThreadTest.php](Tests/ThreadTest.php).
 
@@ -223,6 +105,7 @@ Released under the [MIT](LICENSE.md) license.
 Links
 -----
 
+* [Mail list](mailto:azathread@googlegroups.com) (via [Google Group](https://groups.google.com/forum/#!forum/azathread))
 * [Composer package][ComposerPackage]
 * [Last build on the Travis CI][Travis]
 * [Project profile on the Ohloh](https://www.ohloh.net/p/AzaThread)

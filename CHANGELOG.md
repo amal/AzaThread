@@ -4,6 +4,9 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+24.05.2013
+- **IMPROVED:** Separate detailed documentation in two languages (amal)
+
 16.05.2013
 - **MINOR:** Small improvements and fixes (amal)
 - **IMPROVED:** IPC optimizations (8-10% speedup) (amal)

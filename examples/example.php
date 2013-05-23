@@ -94,6 +94,9 @@ for ($i = 0; $i < $num; $i++) {
 		echo 'error' . PHP_EOL;
 	}
 }
+
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $thread->cleanup();
 
 
@@ -121,6 +124,8 @@ for ($i = 0; $i < $num; $i++) {
 	$thread->run($events)->wait();
 	echo 'task ended', PHP_EOL;
 }
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $thread->cleanup();
 
 
@@ -160,6 +165,8 @@ do {
 		}
 	}
 } while ($num > 0);
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $pool->cleanup();
 
 
@@ -208,6 +215,8 @@ do {
 		}
 	}
 } while ($num > 0);
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $pool->cleanup();
 
 
@@ -240,4 +249,6 @@ for ($i = 0; $i < $num; $i++) {
 		echo 'error' . PHP_EOL;
 	}
 }
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $thread->cleanup();
