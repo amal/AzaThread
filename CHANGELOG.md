@@ -4,6 +4,17 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+26.05.2013
+- **MINOR:** `Thread::cleanAll()` method added (amal)
+- **IMPROVED:** Better waiting for dead child process with `pcntl_waitpid` (amal)
+- **IMPROVED:** The child is now explicitly notify a parent before death (amal)
+- **MINOR:** Support for the updated AzaLibEvent API (amal)
+- **CHANGED:** Confirmation mode (eventLocking) removed for support for the newest libevent (amal)
+
+25.05.2013
+- **FEATURE:** Support for the newest libevent has been added (amal)
+- **MINOR:** Added test for huge events data (amal)
+
 24.05.2013
 - **IMPROVED:** Separate detailed documentation in two languages (amal)
 

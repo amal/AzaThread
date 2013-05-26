@@ -1,6 +1,7 @@
 <?php
 
 use Aza\Components\CliBase\Base;
+use Aza\Components\LibEvent\EventBase;
 use Aza\Components\Thread\Exceptions\Exception;
 use Aza\Components\Thread\SimpleThread;
 use Aza\Components\Thread\Thread;
@@ -61,7 +62,7 @@ if (!Thread::$useForks) {
 	if (!Base::$hasForkSupport) {
 		echo PHP_EOL, "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
 	}
-	if (!Base::$hasLibevent) {
+	if (!EventBase::$hasLibevent) {
 		echo PHP_EOL, "You don't have libevent extension installed!";
 	}
 	echo PHP_EOL;

@@ -2,6 +2,7 @@
 
 namespace Aza\Components\Thread\Tests;
 use Aza\Components\CliBase\Base;
+use Aza\Components\LibEvent\EventBase;
 use Aza\Components\Log\Logger;
 use Aza\Components\Socket\Socket;
 use Aza\Components\Thread\Exceptions\Exception;
@@ -18,6 +19,8 @@ use ReflectionProperty;
  *
  * @project Anizoptera CMF
  * @package system.thread
+ * @author  Amal Samally <amal.samally at gmail.com>
+ * @license MIT
  */
 class ThreadTest extends TestCase
 {
@@ -45,6 +48,11 @@ class ThreadTest extends TestCase
 		// Set values to default
 		Thread::$useForks    = self::$defUseForks;
 		Thread::$ipcDataMode = self::$defIpcDataMode;
+
+		// Cleanup
+		EventBase::cleanAllLoops();
+		Thread::cleanAll();
+		gc_collect_cycles();
 	}
 
 	/**
@@ -57,6 +65,8 @@ class ThreadTest extends TestCase
 		Thread::$ipcDataMode = self::$defIpcDataMode;
 
 		// Cleanup
+		EventBase::cleanAllLoops();
+		Thread::cleanAll();
 		gc_collect_cycles();
 	}
 
@@ -222,9 +232,25 @@ class ThreadTest extends TestCase
 
 		$this->assertSame($count+3, $this->getCount());
 		$this->assertSame(Thread::STATE_WAIT, $thread->getState());
-		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertTrue(
+			$thread->getSuccess(),
+			'Job failure - #' . $thread->getLastErrorCode()
+			. ' ' . $thread->getLastErrorMsg()
+		);
 
 		$thread->cleanup();
+	}
+
+	/**
+	 * Thread events test with big data (sync mode)
+	 *
+	 * @author amal
+	 * @group unit
+	 */
+	public function testSyncThreadWithEventsBigData()
+	{
+		Thread::$useForks = false;
+		$this->processThreadEvent(false, true);
 	}
 
 	/**
@@ -546,6 +572,24 @@ class ThreadTest extends TestCase
 	}
 
 	/**
+	 * Thread events test with big data
+	 *
+	 * @author amal
+	 * @group integrational
+	 * @group thread
+	 *
+	 * @requires extension posix
+	 * @requires extension pcntl
+	 */
+	public function testThreadWithEventsBigData()
+	{
+		$testCase = $this;
+		$this->processAsyncTest(function() use ($testCase) {
+			$testCase->processThreadEvent(false, true);
+		}, true);
+	}
+
+	/**
 	 * Errorable thread test
 	 *
 	 * @author amal
@@ -594,9 +638,11 @@ class ThreadTest extends TestCase
 	 */
 	public function testThreadOnetask()
 	{
+		$debug    = false;
 		$testCase = $this;
-		$this->processAsyncTest(function() use ($testCase) {
-			$testCase->processThread(false, true, false, true);
+		$this->processAsyncTest(function() use ($testCase, $debug) {
+			$testCase->processThread($debug, true, false, true);
+			$testCase->processThread($debug, false, false, true);
 		}, true);
 	}
 
@@ -858,25 +904,28 @@ class ThreadTest extends TestCase
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$testCase->assertSame(0, $catchedSignals);
+			$testCase->assertTrue(0 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 
 			$thread->sendSignalToChild(SIGUSR1);
+			usleep(1000);
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$testCase->assertSame(1, $catchedSignals);
+			$testCase->assertTrue(1 === $catchedSignals || 0 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 
 			$thread->sendSignalToChild(SIGUSR1);
+			usleep(1000);
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$testCase->assertSame(2, $catchedSignals);
+			$testCase->assertTrue(2 === $catchedSignals || 1 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 
 			$thread->sendSignalToChild(SIGUSR1);
+			usleep(1000);
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$testCase->assertSame(3, $catchedSignals);
+			$testCase->assertTrue(3 === $catchedSignals || 2 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 
@@ -889,8 +938,9 @@ class ThreadTest extends TestCase
 
 			$thread = new TestSignalsHandling(null, null, $debug);
 			$thread->wait()->sendSignalToChild(SIGUSR1);
+			usleep(1000);
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$testCase->assertSame(1, $catchedSignals);
+			$testCase->assertTrue(1 === $catchedSignals || 0 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
@@ -899,13 +949,9 @@ class ThreadTest extends TestCase
 
 			$thread = new TestSignalsHandling(null, null, $debug);
 			$thread->sendSignalToChild(SIGUSR1)->wait();
+			usleep(1000);
 			$catchedSignals = (int)$thread->run()->wait()->getResult();
-			$expectedCatchedSignals = 0;
-			if ($catchedSignals !== $expectedCatchedSignals) {
-				// Can be sometimes - it's normal
-				$expectedCatchedSignals++;
-			}
-			$testCase->assertSame($expectedCatchedSignals, $catchedSignals);
+			$testCase->assertTrue(0 === $catchedSignals || 1 === $catchedSignals);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK); // Needed sometimes if parent isn't catched signal yet
 			$testCase->assertSame($counter++, TestSignalsHandling::$catchedSignalsInParent);
 			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
@@ -914,24 +960,6 @@ class ThreadTest extends TestCase
 
 			$t->cleanup();
 			unset($counter);
-		});
-	}
-
-	/**
-	 * Thread events with locking test
-	 *
-	 * @author amal
-	 * @group integrational
-	 * @group thread
-	 *
-	 * @requires extension posix
-	 * @requires extension pcntl
-	 */
-	public function testThreadWithEventsAndLocking()
-	{
-		$testCase = $this;
-		$this->processAsyncTest(function() use ($testCase) {
-			$testCase->processThreadEvent(false, true);
 		});
 	}
 
@@ -1189,8 +1217,8 @@ class ThreadTest extends TestCase
 						break 2;
 					}
 				} catch (\Exception $e) {
-					if ($base = Base::getEventBase(false)) {
-						$base->loopBreak();
+					if ($base = EventBase::getMainLoop(false)) {
+						$base->resource && $base->loopBreak();
 					}
 					throw $e;
 				}
@@ -1252,7 +1280,11 @@ class ThreadTest extends TestCase
 			$value = $bigResult ? str_repeat($i, 100000) : $i;
 			$thread->run($value)->wait();
 			$this->assertSame(Thread::STATE_WAIT, $thread->getState());
-			$this->assertTrue($thread->getSuccess(), 'Job failure');
+			$this->assertTrue(
+				$thread->getSuccess(),
+				'Job failure - #' . $thread->getLastErrorCode()
+				. ' ' . $thread->getLastErrorMsg()
+			);
 			$this->assertEquals($value, $thread->getResult());
 			$this->assertEmpty(
 				$thread->getLastErrorCode(),
@@ -1291,7 +1323,11 @@ class ThreadTest extends TestCase
 			null, null, $debug
 		);
 		$thread->wait()->run(null)->wait();
-		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertTrue(
+			$thread->getSuccess(),
+			'Job failure - #' . $thread->getLastErrorCode()
+			. ' ' . $thread->getLastErrorMsg()
+		);
 		$this->assertSame(array(null), $thread->getResult());
 		$this->assertEmpty(
 			$thread->getLastErrorCode(),
@@ -1306,7 +1342,11 @@ class ThreadTest extends TestCase
 			null, null, $debug
 		);
 		$thread->wait()->run()->wait();
-		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertTrue(
+			$thread->getSuccess(),
+			'Job failure - #' . $thread->getLastErrorCode()
+			. ' ' . $thread->getLastErrorMsg()
+		);
 		$this->assertSame(null, $thread->getResult());
 		$this->assertEmpty(
 			$thread->getLastErrorCode(),
@@ -1347,7 +1387,11 @@ class ThreadTest extends TestCase
 		$this->assertSame(0, $thread->onShutdownHookCalls);
 		$this->assertSame(0, $thread->onCleanupHookCalls);
 		$thread->wait()->run()->wait();
-		$this->assertTrue($thread->getSuccess(), 'Job failure');
+		$this->assertTrue(
+			$thread->getSuccess(),
+			'Job failure - #' . $thread->getLastErrorCode()
+			. ' ' . $thread->getLastErrorMsg()
+		);
 		$this->assertSame(array(1, 1, 0, 0), $thread->getResult());
 		$thread->cleanup();
 		$this->assertSame(1, $thread->onLoadHookCalls);
@@ -1376,7 +1420,7 @@ class ThreadTest extends TestCase
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = new TestThreadReturnFirstArgumentWithErrors(
+		$thread = new TestThreadErrorable(
 			null, null, $debug
 		);
 
@@ -1421,11 +1465,11 @@ class ThreadTest extends TestCase
 	 * Thread, events
 	 *
 	 * @param bool $debug
-	 * @param bool $withLocking
+	 * @param bool $bigData
 	 *
 	 * @throws \Exception
 	 */
-	function processThreadEvent($debug = false, $withLocking = false)
+	function processThreadEvent($debug = false, $bigData = false)
 	{
 		$events = 11;
 		$num    = 3;
@@ -1436,11 +1480,12 @@ class ThreadTest extends TestCase
 			'-----------------------', PHP_EOL;
 		}
 
-		$thread = $withLocking
-				? new TestThreadEventsWithLocking(null, null, $debug)
-				: new TestThreadEvents(null, null, $debug);
+		$thread = new TestThreadEvents(null, null, $debug);
 
-		$arg  = mt_rand(12, 987);
+		$arg  = mt_rand(19, 976);
+		if ($bigData) {
+			$arg = str_repeat($arg, 100000);
+		}
 		$last = 0;
 		$testCase = $this;
 		$cb = function($event, $e_data, $e_arg) use ($arg, $testCase, &$last) {
@@ -1454,7 +1499,7 @@ class ThreadTest extends TestCase
 		// to TRUE to not wait thread at first time manually
 		$thread->wait();
 
-		$signalNotChecked = !$withLocking;
+		$signalNotChecked = true;
 		for ($i = 0; $i < $num; $i++) {
 			$last = 0;
 			if ($signalNotChecked) {
@@ -1465,7 +1510,11 @@ class ThreadTest extends TestCase
 			} else {
 				$thread->run($events)->wait();
 			}
-			$this->assertTrue($thread->getSuccess(), 'Job failure');
+			$this->assertTrue(
+				$thread->getSuccess(),
+				'Job failure - #' . $thread->getLastErrorCode()
+				. ' ' . $thread->getLastErrorMsg()
+			);
 		}
 
 		$this->assertSame($events, $last);
@@ -1636,7 +1685,7 @@ class ThreadTest extends TestCase
 			while ($left > 0 && $pool->hasWaiting()) {
 				$arg = mt_rand(1, 999);
 				if ($bigResult) {
-					$arg = str_repeat($arg, 1000000);
+					$arg = str_repeat($arg, 100000);
 				}
 				$threadId = $pool->run($arg);
 				$this->assertNotEmpty($threadId);
@@ -1825,19 +1874,21 @@ class ThreadTest extends TestCase
 	 * Pool, events
 	 *
 	 * @param bool $debug
-	 * @param bool $async
+	 * @param bool $bigData
 	 *
 	 * @throws Exception
 	 */
-	function processPoolEvent($debug = false, $async = false)
+	function processPoolEvent($debug = false, $bigData = false)
 	{
 		$events  = 3;
 		$num     = 12;
 		$threads = 3;
 
+		$async = Thread::$useForks;
+
 		if ($debug) {
 			echo '-----------------------', PHP_EOL,
-			"Thread pool events test: ",  (Thread::$useForks ? 'Async' : 'Sync'), PHP_EOL,
+			"Thread pool events test: ",  ($async ? 'Async' : 'Sync'), PHP_EOL,
 			'-----------------------', PHP_EOL;
 		}
 
@@ -1846,22 +1897,20 @@ class ThreadTest extends TestCase
 			$threads, null, null, $debug
 		);
 
-		$test = $this;
-		$arg  = mt_rand(12, 987);
+		$arg = mt_rand(12, 987);
+		if ($bigData) {
+			$arg = str_repeat($arg, 100000);
+		}
 		$jobs = $worked = array();
-		$cb = function($event, $threadId, $e_data, $e_arg) use ($arg, $test, &$jobs, &$async) {
+		$test = $this;
+		$cb = function($event, $threadId, $e_data, $e_arg) use ($arg, $test, &$jobs) {
 			/** @var $test TestCase */
 			$test->assertSame($arg, $e_arg);
 			$test->assertSame(TestThreadEvents::EV_PROCESS, $event);
-			if ($async) {
-				$test->assertTrue(isset($jobs[$threadId]));
-				$test->assertSame($jobs[$threadId]++, $e_data);
-			} else {
-				if (!isset($jobs[$threadId])) {
-					$jobs[$threadId] = 0;
-				}
-				$test->assertEquals($jobs[$threadId]++, $e_data);
+			if (!isset($jobs[$threadId])) {
+				$jobs[$threadId] = 0;
 			}
+			$test->assertEquals($jobs[$threadId]++, $e_data);
 		};
 		$pool->bind(TestThreadEvents::EV_PROCESS, $cb, $arg);
 
@@ -1873,13 +1922,6 @@ class ThreadTest extends TestCase
 			while ($left > 0 && $pool->hasWaiting()) {
 				$threadId = $pool->run($events);
 				$this->assertNotEmpty($threadId);
-				if ($async) {
-					$this->assertTrue(
-						!isset($jobs[$threadId]),
-						"Thread #$threadId is not failed correctly"
-					);
-					$jobs[$threadId] = 0;
-				}
 				$worked[$threadId] = true;
 				$left--;
 			}
@@ -1920,7 +1962,7 @@ class ThreadTest extends TestCase
 		}
 
 		$pool = new ThreadPool(
-			__NAMESPACE__ . '\TestThreadReturnFirstArgumentWithErrors',
+			__NAMESPACE__ . '\TestThreadErrorable',
 			$threads, null, null, $debug
 		);
 
@@ -1992,7 +2034,7 @@ class ThreadTest extends TestCase
 		}
 
 		$pool = new ThreadPool(
-			__NAMESPACE__ . '\TestThreadReturnFirstArgument',
+			__NAMESPACE__ . '\TestThreadErrorableExternal',
 			$threads, null, null, $debug
 		);
 
@@ -2254,12 +2296,12 @@ class TestThreadReturnFirstArgument extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
-	protected $timeoutMasterResultWait = 5;
+	protected $timeoutMasterResultWait = 10;
 
 	/**
 	 * {@inheritdoc}
 	 */
-	protected $timeoutWorkerJobWait = 2;
+	protected $timeoutWorkerJobWait = 15;
 
 
 	/**
@@ -2384,8 +2426,13 @@ class TestThreadReturnAllArguments extends TestThreadReturnFirstArgument
 /**
  * Test thread
  */
-class TestThreadReturnFirstArgumentWithErrors extends TestThreadReturnFirstArgument
+class TestThreadErrorable extends TestThreadReturnFirstArgument
 {
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $timeoutMasterResultWait = 0.1;
+
 	/**
 	 * {@inheritdoc}
 	 */
@@ -2402,6 +2449,17 @@ class TestThreadReturnFirstArgumentWithErrors extends TestThreadReturnFirstArgum
 		}
 		return parent::process();
 	}
+}
+
+/**
+ * Test thread
+ */
+class TestThreadErrorableExternal extends TestThreadReturnFirstArgument
+{
+	/**
+	 * {@inheritdoc}
+	 */
+	protected $timeoutMasterResultWait = 0.1;
 }
 
 /**
@@ -2440,6 +2498,11 @@ class TestThreadEvents extends TestThreadReturnFirstArgument
 	/**
 	 * {@inheritdoc}
 	 */
+	protected $prefork = false;
+
+	/**
+	 * {@inheritdoc}
+	 */
 	function process()
 	{
 		$events = $this->getParam(0);
@@ -2447,22 +2510,6 @@ class TestThreadEvents extends TestThreadReturnFirstArgument
 			$this->trigger(self::EV_PROCESS, $i);
 		}
 	}
-}
-
-/**
- * Test thread
- */
-class TestThreadEventsWithLocking extends TestThreadEvents
-{
-	/**
-	 * {@inheritdoc}
-	 */
-	protected $eventLocking = true;
-
-	/**
-	 * {@inheritdoc}
-	 */
-	protected $prefork = false;
 }
 
 /**
@@ -2528,6 +2575,11 @@ class TestJobWaitTimeout extends Thread
 	/**
 	 * {@inheritdoc}
 	 */
+	protected $listenMasterSignals = false;
+
+	/**
+	 * {@inheritdoc}
+	 */
 	function process() {}
 }
 
@@ -2550,7 +2602,9 @@ class TestParentCheckTimeout extends Thread
 	{
 		// Create new thread. Set debug flag from this thread
 		$child = new TestParentCheckTimeoutChild(
-			null, null, $this->debug
+			null, null, $this->debug, array(
+				'eventLoop' => new EventBase()
+			)
 		);
 
 		// Send child PID to parent via event
@@ -2576,6 +2630,11 @@ class TestParentCheckTimeoutChild extends Thread
 	 * {@inheritdoc}
 	 */
 	function process() {}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function registerEventSignals($allSignals = true) {}
 }
 
 /**
@@ -2599,9 +2658,6 @@ class TestSignalsHandling extends TestThreadReturnFirstArgument
 	 */
 	function process()
 	{
-		// Needed sometimes if child isn't catched signal yet
-		$this->getEventLoop()->loop(EVLOOP_NONBLOCK);
-
 		return $this->sendSignalToParent(SIGUSR2)->catchedSignals;
 	}
 

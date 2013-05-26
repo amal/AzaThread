@@ -2,6 +2,7 @@
 
 namespace Aza\Components\Thread;
 use Aza\Components\CliBase\Base;
+use Aza\Components\LibEvent\EventBase;
 use Aza\Components\Log\Logger;
 use Aza\Components\Thread\Exceptions\Exception;
 use Aza\Kernel\Core;
@@ -729,7 +730,7 @@ class ThreadPool
 			// Break event loop to avoid freezes and other bugs
 			$base = isset($this->threads[$threadId])
 					? $this->threads[$threadId]->getEventLoop()
-					: Base::getEventBase(false);
+					: EventBase::getMainLoop(false);
 			$base && $base->loopBreak();
 
 			throw new Exception("Incorrect thread for result #$threadId");
@@ -812,7 +813,7 @@ class ThreadPool
 		// Break event loop to avoid freezes and other bugs
 		$base = isset($this->threads[$threadId])
 				? $this->threads[$threadId]->getEventLoop()
-				: Base::getEventBase(false);
+				: EventBase::getMainLoop(false);
 		$base && $base->loopBreak();
 
 		throw new Exception(
@@ -838,7 +839,7 @@ class ThreadPool
 			// Break event loop to avoid freezes and other bugs
 			$base = isset($this->threads[$threadId])
 					? $this->threads[$threadId]->getEventLoop()
-					: Base::getEventBase(false);
+					: EventBase::getMainLoop(false);
 			$base && $base->loopBreak();
 
 			throw new Exception("Incorrect thread for working #$threadId");
