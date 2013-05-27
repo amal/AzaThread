@@ -1,7 +1,9 @@
 <?php
 
 use Aza\Components\CliBase\Base;
+use Aza\Components\LibEvent\EventBase;
 use Aza\Components\Thread\Exceptions\Exception;
+use Aza\Components\Thread\SimpleThread;
 use Aza\Components\Thread\Thread;
 use Aza\Components\Thread\ThreadPool;
 
@@ -26,9 +28,7 @@ require __DIR__ . '/../vendor/autoload.php';
 class TestThreadReturnFirstArgument extends Thread
 {
 	/**
-	 * Main processing.
-	 *
-	 * @return mixed
+	 * {@inheritdoc}
 	 */
 	function process()
 	{
@@ -44,9 +44,7 @@ class TestThreadEvents extends Thread
 	const EV_PROCESS = 'process';
 
 	/**
-	 * Main processing.
-	 *
-	 * @return mixed
+	 * {@inheritdoc}
 	 */
 	function process()
 	{
@@ -64,7 +62,7 @@ if (!Thread::$useForks) {
 	if (!Base::$hasForkSupport) {
 		echo PHP_EOL, "You don't have pcntl or posix extensions installed or either not CLI SAPI environment!";
 	}
-	if (!Base::$hasLibevent) {
+	if (!EventBase::$hasLibevent) {
 		echo PHP_EOL, "You don't have libevent extension installed!";
 	}
 	echo PHP_EOL;
@@ -73,8 +71,8 @@ if (!Thread::$useForks) {
 
 // ----------------------------------------------
 echo PHP_EOL,
-     'Simple example with one thread',
-     PHP_EOL;
+	'Simple example with one thread',
+	PHP_EOL;
 
 $num = 10; // Number of tasks
 $thread = new TestThreadReturnFirstArgument();
@@ -97,14 +95,17 @@ for ($i = 0; $i < $num; $i++) {
 		echo 'error' . PHP_EOL;
 	}
 }
+
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $thread->cleanup();
 
 
 
 // ----------------------------------------------
 echo PHP_EOL,
-     'Simple example with thread events',
-     PHP_EOL;
+	'Simple example with thread events',
+	PHP_EOL;
 
 $events = 10; // Number of events
 $num    = 3;  // Number of tasks
@@ -124,6 +125,8 @@ for ($i = 0; $i < $num; $i++) {
 	$thread->run($events)->wait();
 	echo 'task ended', PHP_EOL;
 }
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $thread->cleanup();
 
 
@@ -132,8 +135,8 @@ $thread->cleanup();
 $threads = 4;
 
 echo PHP_EOL,
-     "Simple example with pool of threads ($threads)",
-     PHP_EOL;
+	"Simple example with pool of threads ($threads)",
+	PHP_EOL;
 
 $pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
@@ -163,6 +166,8 @@ do {
 		}
 	}
 } while ($num > 0);
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $pool->cleanup();
 
 
@@ -173,8 +178,8 @@ $jobs     = range(1, 30);
 $jobs_num = count($jobs);
 
 echo PHP_EOL,
-     "Example with pool of threads ($threads) and pool of jobs ($jobs_num)",
-     PHP_EOL;
+	"Example with pool of threads ($threads) and pool of jobs ($jobs_num)",
+	PHP_EOL;
 
 $pool = new ThreadPool('TestThreadReturnFirstArgument', $threads);
 
@@ -211,4 +216,40 @@ do {
 		}
 	}
 } while ($num > 0);
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
 $pool->cleanup();
+
+
+
+// ----------------------------------------------
+echo PHP_EOL,
+	'Simple example with one "closure" thread',
+	PHP_EOL;
+
+$num = 10; // Number of tasks
+$thread = SimpleThread::create(function($arg) {
+	return $arg;
+});
+
+// "closure" threads are not preforked by default
+// and not multitask too. You can change it via
+// the second argument of `SimpleThread::create`.
+
+for ($i = 0; $i < $num; $i++) {
+	$value = $i;
+	// Run task and wait for the result
+	if ($thread->run($value)->wait()->getSuccess()) {
+		// Success
+		$result = $thread->getResult();
+		echo 'result: ' . $result . PHP_EOL;
+	} else {
+		// Error handling here
+		// processing is not successful if thread dies
+		// when worked or working timeout exceeded
+		echo 'error' . PHP_EOL;
+	}
+}
+// After work it's strongly recommended to clean
+// resources obviously to avoid leaks
+$thread->cleanup();

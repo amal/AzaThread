@@ -4,6 +4,27 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+26.05.2013
+- **MINOR:** `Thread::cleanAll()` method added (amal)
+- **IMPROVED:** Better waiting for dead child process with `pcntl_waitpid` (amal)
+- **IMPROVED:** The child is now explicitly notify a parent before death (amal)
+- **MINOR:** Support for the updated AzaLibEvent API (amal)
+- **CHANGED:** Confirmation mode (eventLocking) removed for support for the newest libevent (amal)
+
+25.05.2013
+- **FEATURE:** Support for the newest libevent has been added (amal)
+- **MINOR:** Added test for huge events data (amal)
+
+24.05.2013
+- **IMPROVED:** Separate detailed documentation in two languages (amal)
+
+16.05.2013
+- **MINOR:** Small improvements and fixes (amal)
+- **IMPROVED:** IPC optimizations (8-10% speedup) (amal)
+- **FEATURE:** Simple API for closure thread - `SimpleThread` class (amal)
+- **FEATURE:** New `onCleanup` hook (amal)
+- **FEATURE:** Thread now can be configured externally (amal)
+
 13.05.2013
 - **FEATURE:** Threads statistics collection + API for accessing it via pool (Issue #4, amal)
 - **MINOR:** Additional tests (empty argument/result, thread hooks) (amal)
