@@ -2,7 +2,7 @@ Usage examples
 ==============
 
 * [↰ back to the documentation contents](0.Index.md)
-* [↰ back to the AzaThread overview](../../../../)
+* [↰ back to the AzaThread overview](../../../../#azathread)
 
 
 
