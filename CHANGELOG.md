@@ -1,10 +1,10 @@
 CHANGELOG
 =========
 
-## Version 1.1 (work in progress)
+## Version 1.2 (work in progress)
 
 
-28.05.2013
+## Version 1.1 (28.05.2013)
 - **MINOR:** Some refactoring, fixes and improvements (amal)
 
 26.05.2013
