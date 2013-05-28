@@ -19,7 +19,7 @@ before_script:
               echo "extension=libevent.so" >> `php --ini | grep "Loaded Configuration" | sed -e "s|.*:\s*||"`;
             fi"
   - php -i | grep "libevent version"
-  - pecl info libevent
+  - php --re libevent | grep Extension
   - composer self-update
   - composer install --dev --prefer-source
 
