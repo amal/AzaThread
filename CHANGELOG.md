@@ -4,6 +4,9 @@ CHANGELOG
 ## Version 1.1 (work in progress)
 
 
+28.05.2013
+- **MINOR:** Some refactoring, fixes and improvements (amal)
+
 26.05.2013
 - **MINOR:** `Thread::cleanAll()` method added (amal)
 - **IMPROVED:** Better waiting for dead child process with `pcntl_waitpid` (amal)

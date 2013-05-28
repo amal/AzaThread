@@ -1075,13 +1075,17 @@ class ThreadTest extends TestCase
 			$thread = new TestJobWaitTimeout(
 				null, null, $debug
 			);
+			$pid = $thread->getChildPid();
+			$thread->wait();
 
 			// To certainly meet the timeout
-			usleep(2);
+			usleep(20000);
+			$thread->getEventLoop()->loop(EVLOOP_NONBLOCK);
 
-			$thread->wait()->run()->wait();
+			if ($thread->getIsForked()) {
+				$thread->run()->wait();
+			}
 
-			$testCase->assertFalse($thread->getSuccess());
 			$testCase->assertSame(
 				Thread::ERR_DEATH,
 				$thread->getLastErrorCode()
@@ -1093,6 +1097,15 @@ class ThreadTest extends TestCase
 			$testCase->assertSame(
 				Thread::STATE_WAIT,
 				$thread->getState()
+			);
+
+			$testCase->assertFalse($thread->getSuccess());
+			$testCase->assertFalse($thread->getIsForked());
+
+			$testCase->assertNotSame($pid, $thread->getChildPid());
+			$testCase->assertSame(
+				$thread->getParentPid(),
+				$thread->getChildPid()
 			);
 
 			$thread->cleanup();
@@ -2533,7 +2546,7 @@ class TestPreforkWaitTimeout extends Thread
 	protected function onFork()
 	{
 		// To certainly meet the timeout
-		usleep(2);
+		usleep(20000);
 	}
 
 	/**
@@ -2558,7 +2571,7 @@ class TestResultWaitTimeout extends Thread
 	function process()
 	{
 		// To certainly meet the timeout
-		usleep(2);
+		usleep(20000);
 	}
 }
 
