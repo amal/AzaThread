@@ -155,7 +155,7 @@ do {
 		// Error handling here
 		// processing is not successful if thread dies
 		// when worked or working timeout exceeded
-		foreach ($failed as $threadId) {
+		foreach ($failed as $threadId => $errorData) {
 			echo "error (thread $threadId)", PHP_EOL;
 			$left++;
 		}
@@ -199,7 +199,7 @@ do {
 		// Error handling here
 		// processing is not successful if thread dies
 		// when worked or working timeout exceeded
-		foreach ($failed as $threadId) {
+		foreach ($failed as $threadId => $errorData) {
 			$jobs[] = $started[$threadId];
 			echo "error: {$started[$threadId]} (thread $threadId)", PHP_EOL;
 			unset($started[$threadId]);
